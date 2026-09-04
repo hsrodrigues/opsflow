@@ -110,10 +110,40 @@ class ApiClient:
     def delete_route(self, access_token: str, route_id: int) -> None:
         self._delete("routes", access_token, route_id)
 
+    # --- Programação (seção 13) ---
+
+    def list_schedule_items(self, access_token: str, **params) -> dict:
+        return self._list("schedules/items", access_token, **params)
+
+    def create_schedule_item(self, access_token: str, payload: dict) -> dict:
+        return self._create("schedules/items", access_token, payload)
+
+    def update_schedule_item(self, access_token: str, item_id: int, payload: dict) -> dict:
+        return self._update("schedules/items", access_token, item_id, payload)
+
+    def change_schedule_item_status(self, access_token: str, item_id: int, status: str, notes: str | None) -> dict:
+        return self._request(
+            "POST", f"/api/v1/schedules/items/{item_id}/status", json={"status": status, "notes": notes},
+            access_token=access_token,
+        )
+
+    def get_schedule_item_history(self, access_token: str, item_id: int) -> list:
+        return self._request(
+            "GET", f"/api/v1/schedules/items/{item_id}/history", access_token=access_token,
+        )
+
+    # --- Centro de Operações (seção 21) ---
+
+    def list_operations(self, access_token: str) -> list:
+        return self._request("GET", "/api/v1/operations", access_token=access_token)
+
+    def get_operations_summary(self, access_token: str, **params) -> dict:
+        return self._request("GET", "/api/v1/operations/summary", params=params, access_token=access_token)
+
     def _request(
         self, method: str, path: str, *, json: dict | None = None, params: dict | None = None,
         access_token: str | None = None,
-    ) -> dict:
+    ) -> dict | list:
         headers = {"Authorization": f"Bearer {access_token}"} if access_token else None
         clean_params = {k: v for k, v in (params or {}).items() if v is not None and v != ""}
         try:

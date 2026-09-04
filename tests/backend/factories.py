@@ -9,8 +9,10 @@ from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
 from app.models.license import License
+from app.models.location import Location
 from app.models.plan import Plan
 from app.models.role import Role
+from app.models.route import Route
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.models.enums import LicenseStatus, UserStatus
@@ -51,3 +53,14 @@ def make_user(
     db.add(user)
     db.flush()
     return user
+
+
+def make_route(db: Session, tenant: Tenant, *, name: str = "Rota Teste") -> Route:
+    origin = Location(tenant_id=tenant.id, name=f"{name} - Origem")
+    destination = Location(tenant_id=tenant.id, name=f"{name} - Destino")
+    db.add_all([origin, destination])
+    db.flush()
+    route = Route(tenant_id=tenant.id, name=name, origin_location_id=origin.id, destination_location_id=destination.id)
+    db.add(route)
+    db.flush()
+    return route

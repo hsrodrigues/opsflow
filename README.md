@@ -39,6 +39,20 @@ Implementado até agora:
 - Desktop: as 4 telas de cadastro completas — busca, filtro por status,
   paginação, criar/editar (diálogo modal)/excluir com confirmação — com
   visual padronizado (badges de status, alerta de CNH vencendo).
+- Desktop: máscara de entrada ao vivo para CPF/CNPJ/telefone.
+
+**Fase 4 — Operações (concluída)**
+- Programação operacional (seção 13): cria uma programação (rota,
+  transportadora, veículo, motorista, horário previsto, carga); o primeiro
+  registro de status fora de `PROGRAMADO` gera automaticamente a `Operation`
+  (com `operation_number`) e cada mudança subsequente grava uma linha na
+  timeline (`status_history`).
+- Centro de Operações (seção 21): contadores (Programadas/Em operação/
+  Atrasadas) e quadro ao vivo das operações ativas, com atualização
+  automática a cada 15s.
+- Desktop: telas de Programação (criar, filtrar por data/status, alterar
+  status com linha do tempo) e Centro de Operações (mesmo visual do mockup
+  da especificação — cartões + tabela com badges coloridos).
 
 Planejado, fase a fase — ver [ARCHITECTURE.md](docs/ARCHITECTURE.md) e a
 seção [Roadmap](#roadmap).
@@ -148,11 +162,11 @@ pendente (hardening): Fase 11, documentado futuramente em `docs/SECURITY.md`.
 | 1 | Estrutura, banco, migrations, backend skeleton, config, Docker | ✅ Concluída |
 | 2 | Autenticação e multi-tenancy | ✅ Concluída |
 | 3 | Cadastros (veículos, motoristas, transportadoras, rotas) | ✅ Concluída |
-| 4 | Operações (programação, timeline, status) | Planejada |
+| 4 | Operações (programação, timeline, status) | ✅ Concluída |
 | 5 | Dashboard | Planejada |
 | 6 | Relatórios/exportação | Planejada |
 | 7 | Licenciamento (endpoints + enforcement) | Parcial (enforcement de limite de veículos já ativo) |
-| 8 | Desktop (PySide6) | 🔶 Em andamento (login, shell e cadastros adiantados; faltam operações/dashboard/relatórios) |
+| 8 | Desktop (PySide6) | 🔶 Em andamento (login, shell, cadastros e operações adiantados; faltam dashboard/relatórios) |
 | 9 | Testes (cobertura ampla, isolamento multi-tenant) | Planejada |
 | 10 | Build e instalador | Planejada |
 | 11 | Hardening de segurança | Planejada |

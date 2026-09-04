@@ -23,7 +23,9 @@ from services.async_task import ApiWorker
 from ui.carriers_page import CarriersPage
 from ui.dashboard_page import DashboardPage
 from ui.drivers_page import DriversPage
+from ui.operations_page import OperationsPage
 from ui.routes_page import RoutesPage
+from ui.schedules_page import SchedulesPage
 from ui.vehicles_page import VehiclesPage
 
 # Navegação agrupada por seção (padrão comum em ERPs: Visão Geral / Cadastros
@@ -40,8 +42,8 @@ _NAV_SECTIONS = [
         ("Rotas", True, lambda self: RoutesPage(self._api_client, self._session)),
     ]),
     ("OPERAÇÃO", [
-        ("Programação", False, None),
-        ("Centro de Operações", False, None),
+        ("Programação", True, lambda self: SchedulesPage(self._api_client, self._session)),
+        ("Centro de Operações", True, lambda self: OperationsPage(self._api_client, self._session)),
         ("Ocorrências", False, None),
     ]),
     ("ANÁLISE", [
