@@ -40,24 +40,61 @@ class ApiClient:
     def get_me(self, access_token: str) -> dict:
         return self._request("GET", "/api/v1/auth/me", access_token=access_token)
 
+    # --- CRUD genérico de cadastro (seção 9/10/11: mesmo padrão em todos) ---
+
+    def _list(self, resource: str, access_token: str, **params) -> dict:
+        return self._request("GET", f"/api/v1/{resource}", params=params, access_token=access_token)
+
+    def _create(self, resource: str, access_token: str, payload: dict) -> dict:
+        return self._request("POST", f"/api/v1/{resource}", json=payload, access_token=access_token)
+
+    def _update(self, resource: str, access_token: str, record_id: int, payload: dict) -> dict:
+        return self._request("PATCH", f"/api/v1/{resource}/{record_id}", json=payload, access_token=access_token)
+
+    def _delete(self, resource: str, access_token: str, record_id: int) -> None:
+        self._request("DELETE", f"/api/v1/{resource}/{record_id}", access_token=access_token)
+
     # --- Veículos (seção 9) ---
 
     def list_vehicles(self, access_token: str, **params) -> dict:
-        return self._request("GET", "/api/v1/vehicles", params=params, access_token=access_token)
+        return self._list("vehicles", access_token, **params)
 
     def create_vehicle(self, access_token: str, payload: dict) -> dict:
-        return self._request("POST", "/api/v1/vehicles", json=payload, access_token=access_token)
+        return self._create("vehicles", access_token, payload)
 
     def update_vehicle(self, access_token: str, vehicle_id: int, payload: dict) -> dict:
-        return self._request("PATCH", f"/api/v1/vehicles/{vehicle_id}", json=payload, access_token=access_token)
+        return self._update("vehicles", access_token, vehicle_id, payload)
 
     def delete_vehicle(self, access_token: str, vehicle_id: int) -> None:
-        self._request("DELETE", f"/api/v1/vehicles/{vehicle_id}", access_token=access_token)
+        self._delete("vehicles", access_token, vehicle_id)
 
-    # --- Transportadoras (seção 11, usado para preencher combos) ---
+    # --- Motoristas (seção 10) ---
+
+    def list_drivers(self, access_token: str, **params) -> dict:
+        return self._list("drivers", access_token, **params)
+
+    def create_driver(self, access_token: str, payload: dict) -> dict:
+        return self._create("drivers", access_token, payload)
+
+    def update_driver(self, access_token: str, driver_id: int, payload: dict) -> dict:
+        return self._update("drivers", access_token, driver_id, payload)
+
+    def delete_driver(self, access_token: str, driver_id: int) -> None:
+        self._delete("drivers", access_token, driver_id)
+
+    # --- Transportadoras (seção 11) ---
 
     def list_carriers(self, access_token: str, **params) -> dict:
-        return self._request("GET", "/api/v1/carriers", params=params, access_token=access_token)
+        return self._list("carriers", access_token, **params)
+
+    def create_carrier(self, access_token: str, payload: dict) -> dict:
+        return self._create("carriers", access_token, payload)
+
+    def update_carrier(self, access_token: str, carrier_id: int, payload: dict) -> dict:
+        return self._update("carriers", access_token, carrier_id, payload)
+
+    def delete_carrier(self, access_token: str, carrier_id: int) -> None:
+        self._delete("carriers", access_token, carrier_id)
 
     def _request(
         self, method: str, path: str, *, json: dict | None = None, params: dict | None = None,
