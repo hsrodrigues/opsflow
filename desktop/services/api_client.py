@@ -40,10 +40,33 @@ class ApiClient:
     def get_me(self, access_token: str) -> dict:
         return self._request("GET", "/api/v1/auth/me", access_token=access_token)
 
-    def _request(self, method: str, path: str, *, json: dict | None = None, access_token: str | None = None) -> dict:
+    # --- Veículos (seção 9) ---
+
+    def list_vehicles(self, access_token: str, **params) -> dict:
+        return self._request("GET", "/api/v1/vehicles", params=params, access_token=access_token)
+
+    def create_vehicle(self, access_token: str, payload: dict) -> dict:
+        return self._request("POST", "/api/v1/vehicles", json=payload, access_token=access_token)
+
+    def update_vehicle(self, access_token: str, vehicle_id: int, payload: dict) -> dict:
+        return self._request("PATCH", f"/api/v1/vehicles/{vehicle_id}", json=payload, access_token=access_token)
+
+    def delete_vehicle(self, access_token: str, vehicle_id: int) -> None:
+        self._request("DELETE", f"/api/v1/vehicles/{vehicle_id}", access_token=access_token)
+
+    # --- Transportadoras (seção 11, usado para preencher combos) ---
+
+    def list_carriers(self, access_token: str, **params) -> dict:
+        return self._request("GET", "/api/v1/carriers", params=params, access_token=access_token)
+
+    def _request(
+        self, method: str, path: str, *, json: dict | None = None, params: dict | None = None,
+        access_token: str | None = None,
+    ) -> dict:
         headers = {"Authorization": f"Bearer {access_token}"} if access_token else None
+        clean_params = {k: v for k, v in (params or {}).items() if v is not None and v != ""}
         try:
-            response = self._client.request(method, path, json=json, headers=headers)
+            response = self._client.request(method, path, json=json, params=clean_params or None, headers=headers)
         except httpx.ConnectError as exc:
             raise ConnectionUnavailableError(str(exc)) from exc
         except httpx.TimeoutException as exc:

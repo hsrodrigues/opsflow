@@ -6,42 +6,23 @@ in/out, and the repositories only know how to fetch/persist rows.
 """
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.exceptions import ForbiddenError, UnauthorizedError
-from app.core.logging_config import get_audit_logger
 from app.core.security import create_access_token, generate_refresh_token, verify_password
-from app.models.audit_log import AuditLog
 from app.models.enums import AuditAction, UserStatus
-from app.models.license import License
 from app.models.user import User
 from app.repositories.refresh_token_repository import RefreshTokenRepository
 from app.repositories.user_repository import get_user_by_email
-from app.schemas.auth import LicenseInfo, TokenResponse, UserInfo
+from app.schemas.auth import TokenResponse, UserInfo
+from app.services.audit_service import write_audit_log
+from app.services.license_service import build_license_info, get_latest_license
 
 
 def _utc_now() -> datetime:
     """Current UTC time, naive (matches the naive `DateTime` columns in the schema)."""
     return datetime.now(timezone.utc).replace(tzinfo=None)
-
-
-def _write_audit_log(
-    db: Session, *, tenant_id: int | None, user_id: int | None, action: AuditAction, ip_address: str | None,
-) -> None:
-    db.add(
-        AuditLog(
-            tenant_id=tenant_id, user_id=user_id, action=action, table_name="users",
-            record_id=str(user_id) if user_id else None, ip_address=ip_address, created_at=_utc_now(),
-        )
-    )
-    get_audit_logger().info("action=%s user_id=%s tenant_id=%s ip=%s", action.value, user_id, tenant_id, ip_address)
-
-
-def _latest_license(db: Session, tenant_id: int) -> License | None:
-    stmt = select(License).where(License.tenant_id == tenant_id).order_by(License.issued_at.desc()).limit(1)
-    return db.execute(stmt).scalar_one_or_none()
 
 
 def build_user_info(user: User) -> UserInfo:
@@ -52,29 +33,6 @@ def build_user_info(user: User) -> UserInfo:
     return UserInfo(
         id=user.id, email=user.email, full_name=user.full_name, tenant_id=user.tenant_id,
         roles=role_codes, permissions=permission_codes,
-    )
-
-
-def build_license_info(license_: License | None) -> LicenseInfo | None:
-    """Build the response's license summary — the *effective* limits.
-
-    `License.max_users`/`max_vehicles` only override the plan's own limits
-    when set (seção 6); most licenses leave them `NULL` and simply inherit
-    whatever the plan defines, so callers must never read the license's raw
-    column value directly, or a plan-default limit would render as "no
-    limit" instead of the number the plan actually grants.
-    """
-    if license_ is None:
-        return None
-    status = license_.status.value if hasattr(license_.status, "value") else license_.status
-    plan = license_.plan
-    effective_max_users = license_.max_users if license_.max_users is not None else (plan.max_users if plan else None)
-    effective_max_vehicles = (
-        license_.max_vehicles if license_.max_vehicles is not None else (plan.max_vehicles if plan else None)
-    )
-    return LicenseInfo(
-        status=status, plan_code=plan.code.value if plan else "",
-        expires_at=license_.expires_at, max_users=effective_max_users, max_vehicles=effective_max_vehicles,
     )
 
 
@@ -109,7 +67,7 @@ def login(
     if tenant is not None and not tenant.is_active:
         raise ForbiddenError("Esta empresa está inativa. Contate o suporte.")
 
-    license_ = _latest_license(db, user.tenant_id) if user.tenant_id is not None else None
+    license_ = get_latest_license(db, user.tenant_id) if user.tenant_id is not None else None
 
     user.failed_login_attempts = 0
     user.locked_until = None
@@ -123,7 +81,10 @@ def login(
         expires_at=_utc_now() + timedelta(days=settings.refresh_token_expire_days),
         ip_address=ip_address, user_agent=user_agent,
     )
-    _write_audit_log(db, tenant_id=user.tenant_id, user_id=user.id, action=AuditAction.LOGIN, ip_address=ip_address)
+    write_audit_log(
+        db, tenant_id=user.tenant_id, user_id=user.id, action=AuditAction.LOGIN,
+        table_name="users", record_id=str(user.id), ip_address=ip_address,
+    )
 
     db.commit()
     db.refresh(user)
@@ -148,7 +109,7 @@ def refresh(db: Session, *, raw_refresh_token: str, ip_address: str | None, user
 
     repo.revoke(token)
 
-    license_ = _latest_license(db, user.tenant_id) if user.tenant_id is not None else None
+    license_ = get_latest_license(db, user.tenant_id) if user.tenant_id is not None else None
     access_token, expires_at = create_access_token(user_id=user.id, tenant_id=user.tenant_id)
     new_raw_refresh_token = generate_refresh_token()
     repo.create(
@@ -172,5 +133,8 @@ def logout(db: Session, *, raw_refresh_token: str, ip_address: str | None) -> No
     if token is None:
         return  # já inválido/expirado — logout é idempotente, não é erro
     repo.revoke(token)
-    _write_audit_log(db, tenant_id=None, user_id=token.user_id, action=AuditAction.LOGOUT, ip_address=ip_address)
+    write_audit_log(
+        db, tenant_id=None, user_id=token.user_id, action=AuditAction.LOGOUT,
+        table_name="users", record_id=str(token.user_id), ip_address=ip_address,
+    )
     db.commit()

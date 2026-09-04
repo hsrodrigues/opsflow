@@ -14,13 +14,29 @@ licenciamento comercial.
 
 ## Features
 
-Implementado até agora (**Fase 1 — Arquitetura**):
+Implementado até agora:
 
+**Fase 1 — Arquitetura**
 - Schema completo do banco (29 tabelas) com isolamento multi-tenant por
   `tenant_id`, RBAC com 5 papéis e matriz de permissões, catálogo de planos.
 - API FastAPI com tratamento de erro global, health check e logging
   estruturado com rotação.
 - Migrations Alembic e seed de dados demonstrativos.
+
+**Fase 2 — Autenticação (backend + fatia mínima do desktop)**
+- Login/refresh/logout com JWT + refresh token rotativo, bloqueio por
+  tentativas excessivas, RBAC (`get_current_user`/`require_permission`).
+- Desktop: tela de login (seção 5) e shell principal navegável (sidebar,
+  topbar, tema claro/escuro, indicador de conexão) — adiantados da Fase 8
+  para permitir validação visual desde já.
+
+**Fase 3 — Cadastros (em andamento)**
+- CRUD completo de Transportadoras, Motoristas e Veículos: busca, filtros,
+  paginação, validação de duplicidade (CNPJ/CPF/placa), soft delete,
+  enforcement do limite de veículos do plano (seção 6), trilha de auditoria.
+- Desktop: tela de Veículos (seção 9) completa — busca, filtro por status,
+  paginação, criar/editar/excluir com confirmação. Motoristas e
+  Transportadoras seguem o mesmo backend; suas telas vêm a seguir.
 
 Planejado, fase a fase — ver [ARCHITECTURE.md](docs/ARCHITECTURE.md) e a
 seção [Roadmap](#roadmap).
@@ -128,13 +144,13 @@ pendente (hardening): Fase 11, documentado futuramente em `docs/SECURITY.md`.
 | Fase | Conteúdo | Status |
 |---|---|---|
 | 1 | Estrutura, banco, migrations, backend skeleton, config, Docker | ✅ Concluída |
-| 2 | Autenticação e multi-tenancy | Planejada |
-| 3 | Cadastros (veículos, motoristas, transportadoras, rotas) | Planejada |
+| 2 | Autenticação e multi-tenancy | ✅ Concluída |
+| 3 | Cadastros (veículos, motoristas, transportadoras, rotas) | 🔶 Em andamento (veículos/motoristas/transportadoras prontos; rotas pendente) |
 | 4 | Operações (programação, timeline, status) | Planejada |
 | 5 | Dashboard | Planejada |
 | 6 | Relatórios/exportação | Planejada |
-| 7 | Licenciamento (endpoints + enforcement) | Planejada |
-| 8 | Desktop (PySide6) | Planejada |
+| 7 | Licenciamento (endpoints + enforcement) | Parcial (enforcement de limite de veículos já ativo) |
+| 8 | Desktop (PySide6) | 🔶 Em andamento (login, shell e tela de Veículos adiantados) |
 | 9 | Testes (cobertura ampla, isolamento multi-tenant) | Planejada |
 | 10 | Build e instalador | Planejada |
 | 11 | Hardening de segurança | Planejada |

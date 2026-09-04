@@ -28,6 +28,10 @@ from sqlalchemy.orm import sessionmaker  # noqa: E402
 _TEST_DB_PATH = Path(".pytest_opsflow_test.db")
 _MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "database" / "migrations"
 
+# Semeadas uma única vez pela migration (roles/permissions/plans) — nunca
+# apagadas entre testes, só os dados que cada teste cria.
+_SEED_TABLES = {"roles", "permissions", "role_permissions", "plans", "alembic_version"}
+
 
 @pytest.fixture(scope="session")
 def test_engine():
@@ -57,26 +61,34 @@ def test_engine():
 
 @pytest.fixture()
 def db_session(test_engine):
-    """A database session wrapped in a transaction that is always rolled back.
+    """A plain database session, cleaned up by deleting every non-seed row
+    after the test (not by rolling back a transaction).
 
-    `join_transaction_mode="create_savepoint"` is what makes this safe even
-    though application code (the services under test) calls `db.commit()`
-    itself: each such commit only releases/reopens a SAVEPOINT nested inside
-    the outer transaction started below, which the `finally` block always
-    rolls back — so no test's data ever leaks into the next one.
+    An earlier version of this fixture wrapped each test in an outer
+    transaction (`connection.begin()` + `join_transaction_mode=
+    "create_savepoint"`) and rolled it back on teardown — the standard
+    SQLAlchemy testing recipe. In this project that rollback silently failed
+    to undo `app.services.*`'s own `db.commit()` calls when a request went
+    through `TestClient` (FastAPI's sync endpoints run in a worker thread,
+    which apparently broke the savepoint nesting): rows from one test kept
+    existing in the next one. It went unnoticed until a fixture reused a
+    fixed e-mail across tests and hit a UNIQUE-constraint collision — see
+    the git history of this file if the symptom resurfaces. Explicit
+    row-deletion has none of that ambiguity: it isn't relying on any
+    session/thread affinity to work.
     """
-    connection = test_engine.connect()
-    transaction = connection.begin()
-    session_factory = sessionmaker(
-        bind=connection, future=True, expire_on_commit=False, join_transaction_mode="create_savepoint",
-    )
+    from app.models import Base
+
+    session_factory = sessionmaker(bind=test_engine, future=True, expire_on_commit=False)
     session = session_factory()
     try:
         yield session
     finally:
         session.close()
-        transaction.rollback()
-        connection.close()
+        with test_engine.begin() as connection:
+            for table in reversed(Base.metadata.sorted_tables):
+                if table.name not in _SEED_TABLES:
+                    connection.execute(table.delete())
 
 
 @pytest.fixture()
@@ -96,3 +108,25 @@ def client(db_session):
             yield test_client
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def auth_client(client, db_session):
+    """A `(client, headers, tenant, user)` tuple, already logged in as an
+    ADMIN_EMPRESA of a fresh tenant — the setup every cadastros CRUD test needs.
+    """
+    from tests.backend.factories import make_license, make_tenant, make_user
+
+    tenant = make_tenant(db_session)
+    make_license(db_session, tenant)
+    make_user(db_session, tenant, email="admin@auth-client-fixture.com", password="Sup3rSecret!")
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/auth/login", json={"email": "admin@auth-client-fixture.com", "password": "Sup3rSecret!"}
+    )
+    assert response.status_code == 200, response.text
+    access_token = response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    return client, headers, tenant

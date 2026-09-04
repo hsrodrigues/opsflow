@@ -1,17 +1,17 @@
 """Main application shell (seção 26): sidebar + topbar + content + status bar.
 
-Only "Dashboard" is wired to real content in this vertical slice — the
-other nav items exist (so the product's real shape is visible) but are
-disabled with a "em breve" tooltip until their fase lands, rather than
-faking a screen that does nothing.
+The content area is a `QStackedWidget`; each enabled nav item owns a page
+(built lazily, on first visit, so we don't fire API calls for screens the
+user never opens). Items still pending their fase stay visible — so the
+product's real shape shows — but disabled with a "em breve" tooltip rather
+than opening a screen that fakes doing something.
 """
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
-    QFrame,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -20,18 +20,21 @@ from app.config import DesktopConfig
 from app.session import UserSession
 from services.api_client import ApiClient
 from services.async_task import ApiWorker
+from ui.dashboard_page import DashboardPage
+from ui.vehicles_page import VehiclesPage
 
+# (rótulo, habilitado, fábrica da página — None para itens ainda sem tela)
 _NAV_ITEMS = [
-    ("Dashboard", True),
-    ("Veículos", False),
-    ("Motoristas", False),
-    ("Transportadoras", False),
-    ("Rotas", False),
-    ("Programação", False),
-    ("Centro de Operações", False),
-    ("Ocorrências", False),
-    ("Relatórios", False),
-    ("Configurações", False),
+    ("Dashboard", True, lambda self: DashboardPage(self._session)),
+    ("Veículos", True, lambda self: VehiclesPage(self._api_client, self._session)),
+    ("Motoristas", False, None),
+    ("Transportadoras", False, None),
+    ("Rotas", False, None),
+    ("Programação", False, None),
+    ("Centro de Operações", False, None),
+    ("Ocorrências", False, None),
+    ("Relatórios", False, None),
+    ("Configurações", False, None),
 ]
 
 _HEALTH_POLL_INTERVAL_MS = 15_000
@@ -45,22 +48,6 @@ def _repolish(widget: QWidget) -> None:
     """
     widget.style().unpolish(widget)
     widget.style().polish(widget)
-
-_ROLE_LABELS = {
-    "SUPER_ADMIN": "Administrador da Plataforma",
-    "ADMIN_EMPRESA": "Administrador",
-    "SUPERVISOR": "Supervisor",
-    "OPERADOR": "Operador",
-    "VISUALIZADOR": "Visualizador",
-}
-
-_LICENSE_LABELS = {
-    "ACTIVE": ("Licença ativa", None),
-    "TRIAL": ("Você está em período de teste.", "LicenseBannerTrial"),
-    "SUSPENDED": ("Licença suspensa — contate o suporte para reativar.", "LicenseBannerExpired"),
-    "EXPIRED": ("Licença expirada — contate o suporte para renovar.", "LicenseBannerExpired"),
-    "CANCELLED": ("Licença cancelada — contate o suporte.", "LicenseBannerExpired"),
-}
 
 
 class MainWindow(QWidget):
@@ -77,6 +64,8 @@ class MainWindow(QWidget):
         self._dark_mode = False
         self._logout_worker: ApiWorker | None = None
         self._health_worker: ApiWorker | None = None
+        self._nav_buttons: list[QPushButton] = []
+        self._page_indexes: dict[str, int] = {}
 
         self.setObjectName("AppRoot")
         self.setWindowTitle("OpsFlow")
@@ -84,7 +73,7 @@ class MainWindow(QWidget):
         self.setMinimumSize(1024, 640)
 
         self._build_ui()
-        self._populate_welcome_card()
+        self._navigate_to("Dashboard")
 
         self._health_timer = QTimer(self)
         self._health_timer.timeout.connect(self._poll_health)
@@ -102,7 +91,10 @@ class MainWindow(QWidget):
         right = QVBoxLayout()
         right.setSpacing(0)
         right.addWidget(self._build_topbar())
-        right.addWidget(self._build_content(), stretch=1)
+
+        self._stack = QStackedWidget()
+        right.addWidget(self._stack, stretch=1)
+
         right.addWidget(self._build_status_bar())
 
         right_container = QWidget()
@@ -120,14 +112,16 @@ class MainWindow(QWidget):
         layout.addWidget(QLabel("Gestão Operacional", objectName="SidebarTagline"))
         layout.addSpacing(24)
 
-        for label, enabled in _NAV_ITEMS:
+        for label, enabled, _factory in _NAV_ITEMS:
             button = QPushButton(label, objectName="NavItem")
             button.setCheckable(True)
-            button.setChecked(enabled and label == "Dashboard")
             button.setEnabled(enabled)
-            if not enabled:
+            if enabled:
+                button.clicked.connect(lambda _checked, name=label: self._navigate_to(name))
+            else:
                 button.setToolTip("Disponível em uma próxima fase")
             layout.addWidget(button)
+            self._nav_buttons.append(button)
 
         layout.addStretch(1)
         return sidebar
@@ -165,35 +159,6 @@ class MainWindow(QWidget):
 
         return topbar
 
-    def _build_content(self) -> QWidget:
-        content = QWidget()
-        layout = QVBoxLayout(content)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(16)
-
-        self._license_banner = QLabel("")
-        self._license_banner.hide()
-        layout.addWidget(self._license_banner)
-
-        welcome = QLabel("")
-        welcome.setObjectName("PageTitle")
-        self._welcome_label = welcome
-        layout.addWidget(welcome)
-
-        subtitle = QLabel("")
-        subtitle.setObjectName("Muted")
-        self._subtitle_label = subtitle
-        layout.addWidget(subtitle)
-        layout.addSpacing(8)
-
-        cards_grid = QGridLayout()
-        cards_grid.setSpacing(16)
-        self._cards_grid = cards_grid
-        layout.addLayout(cards_grid)
-
-        layout.addStretch(1)
-        return content
-
     def _build_status_bar(self) -> QWidget:
         bar = QWidget(objectName="StatusBar")
         bar.setFixedHeight(30)
@@ -206,38 +171,18 @@ class MainWindow(QWidget):
         layout.addWidget(tenant_label)
         return bar
 
-    # --- dados ---
+    # --- navegação ---
 
-    def _populate_welcome_card(self) -> None:
-        self._welcome_label.setText(f"Bem-vindo, {self._session.full_name}")
-        role_labels = ", ".join(_ROLE_LABELS.get(r, r) for r in self._session.roles) or "—"
-        self._subtitle_label.setText(f"{self._session.email} · {role_labels}")
+    def _navigate_to(self, label: str) -> None:
+        if label not in self._page_indexes:
+            factory = next(f for lbl, _enabled, f in _NAV_ITEMS if lbl == label)
+            page = factory(self)
+            self._page_indexes[label] = self._stack.addWidget(page)
 
-        if self._session.license_status:
-            text, style = _LICENSE_LABELS.get(self._session.license_status, (self._session.license_status, None))
-            self._license_banner.setText(f"ℹ {text}")
-            self._license_banner.setObjectName(style or "Muted")
-            self._license_banner.setVisible(style is not None)
-            _repolish(self._license_banner)
-
-        cards = [
-            ("Plano", self._session.license_plan_code or "—"),
-            ("Status da licença", self._session.license_status or "—"),
-            ("Permissões concedidas", str(len(self._session.permissions))),
-            ("Papéis", str(len(self._session.roles))),
-        ]
-        for index, (label, value) in enumerate(cards):
-            self._cards_grid.addWidget(self._build_stat_card(label, value), 0, index)
-
-    @staticmethod
-    def _build_stat_card(label: str, value: str) -> QFrame:
-        card = QFrame(objectName="Card")
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(18, 16, 18, 16)
-        value_label = QLabel(value, objectName="CardValue")
-        layout.addWidget(value_label)
-        layout.addWidget(QLabel(label, objectName="CardLabel"))
-        return card
+        self._stack.setCurrentIndex(self._page_indexes[label])
+        self._page_title.setText(label)
+        for button in self._nav_buttons:
+            button.setChecked(button.text() == label)
 
     # --- ações ---
 

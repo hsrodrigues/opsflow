@@ -66,3 +66,16 @@ def require_permission(permission_code: str) -> Callable[[User], User]:
         return user
 
     return _check
+
+
+def get_current_tenant_id(user: User = Depends(get_current_user)) -> int:
+    """Resolve the current request's tenant, for endpoints scoped to a single company.
+
+    Raises when the caller is a `SUPER_ADMIN` (`tenant_id is None`) — platform
+    admins managing a specific tenant's cadastros is out of scope for now
+    (it would require an explicit "impersonate tenant" mechanism, not just
+    reading a claim), so that case is rejected rather than silently guessing.
+    """
+    if user.tenant_id is None:
+        raise ForbiddenError("Esta ação requer um usuário vinculado a uma empresa.")
+    return user.tenant_id
