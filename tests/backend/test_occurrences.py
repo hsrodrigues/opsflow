@@ -1,0 +1,77 @@
+"""Tests for `/api/v1/occurrences` (seção 14)."""
+from app.models.occurrence_type import OccurrenceType
+
+
+def test_create_occurrence_creates_type_and_sets_responsible_user(auth_client, db_session):
+    client, headers, tenant = auth_client
+
+    response = client.post(
+        "/api/v1/occurrences", headers=headers,
+        json={
+            "occurrence_type_name": "Atraso", "description": "Trânsito intenso na rodovia.",
+            "severity": "MEDIA", "occurred_at": "2026-09-10T08:30:00",
+        },
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["occurrence_type_name"] == "Atraso"
+    assert body["status"] == "ABERTA"
+    assert body["responsible_user_name"] is not None
+
+    occurrence_type = db_session.query(OccurrenceType).filter(
+        OccurrenceType.tenant_id == tenant.id, OccurrenceType.name == "Atraso"
+    ).one_or_none()
+    assert occurrence_type is not None
+
+
+def test_reusing_same_type_name_does_not_duplicate_it(auth_client, db_session):
+    client, headers, tenant = auth_client
+    payload = {"occurrence_type_name": "Quebra", "description": "Pneu furado.", "occurred_at": "2026-09-10T09:00:00"}
+    client.post("/api/v1/occurrences", headers=headers, json=payload)
+    client.post("/api/v1/occurrences", headers=headers, json={**payload, "description": "Outra quebra."})
+
+    types = db_session.query(OccurrenceType).filter(
+        OccurrenceType.tenant_id == tenant.id, OccurrenceType.name == "Quebra"
+    ).all()
+    assert len(types) == 1
+
+
+def test_filter_occurrences_by_severity(auth_client):
+    client, headers, _tenant = auth_client
+    client.post(
+        "/api/v1/occurrences", headers=headers,
+        json={
+            "occurrence_type_name": "Acidente", "description": "Colisão leve.", "severity": "CRITICA",
+            "occurred_at": "2026-09-10T10:00:00",
+        },
+    )
+    client.post(
+        "/api/v1/occurrences", headers=headers,
+        json={
+            "occurrence_type_name": "Divergência", "description": "Quantidade divergente.", "severity": "BAIXA",
+            "occurred_at": "2026-09-10T11:00:00",
+        },
+    )
+
+    response = client.get("/api/v1/occurrences?severity=CRITICA", headers=headers)
+    assert response.json()["meta"]["total"] == 1
+    assert response.json()["items"][0]["severity"] == "CRITICA"
+
+
+def test_update_occurrence_status(auth_client):
+    client, headers, _tenant = auth_client
+    created = client.post(
+        "/api/v1/occurrences", headers=headers,
+        json={"occurrence_type_name": "Outros", "description": "Teste.", "occurred_at": "2026-09-10T12:00:00"},
+    ).json()
+
+    response = client.patch(
+        f"/api/v1/occurrences/{created['id']}", headers=headers, json={"status": "RESOLVIDA"}
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "RESOLVIDA"
+
+
+def test_occurrence_endpoints_require_authentication(client):
+    response = client.get("/api/v1/occurrences")
+    assert response.status_code == 401

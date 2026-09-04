@@ -32,6 +32,9 @@ class Occurrence(Base, TimestampMixin, TenantMixin, AuditMixin, SoftDeleteMixin)
     occurred_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
     occurrence_type: Mapped["OccurrenceType"] = relationship()
+    vehicle: Mapped["Vehicle"] = relationship()
+    driver: Mapped["Driver"] = relationship()
+    responsible_user: Mapped["User"] = relationship(foreign_keys=[responsible_user_id])
     attachments: Mapped[list["Attachment"]] = relationship(back_populates="occurrence")
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid

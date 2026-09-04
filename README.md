@@ -63,6 +63,8 @@ Implementado, testado e rodando contra MySQL real — não protótipo visual:
 | **Autenticação** | Login/refresh/logout com JWT + refresh token rotativo, bloqueio por tentativas excessivas, RBAC ponta a ponta |
 | **Cadastros** | Veículos, Motoristas, Transportadoras e Rotas — CRUD completo: busca, filtros, paginação, validação de duplicidade, soft delete, auditoria, máscara de CPF/CNPJ/telefone |
 | **Operações** | Programação operacional com timeline de status automática (`schedule → operation → status_history`), Centro de Operações ao vivo (contadores + quadro de operações, seção 21 da spec) |
+| **Ocorrências** | CRUD completo (seção 14) — tipo configurável, severidade, status, vínculo com veículo/motorista |
+| **Dashboard** | 9 KPIs (operações hoje, concluídas, atrasadas, tempo médio, taxa de conclusão, ...) + 3 gráficos (QtCharts) com filtro de período — seções 15/16 |
 | **Notificações & automações** | 3 robôs em background (APScheduler): detecção automática de atraso, alerta de CNH vencendo, expiração automática de licença — cada um notifica os administradores da empresa sozinho |
 | **Licenciamento** | Licença por tenant (`ACTIVE`/`TRIAL`/`SUSPENDED`/`EXPIRED`/`CANCELLED`), validada pela API a cada login, enforcement do limite de veículos/usuários do plano |
 | **Desktop (PySide6)** | Login, shell navegável (sidebar por seção, tema claro/escuro, indicador de conexão), todas as telas acima já com visual final |
@@ -147,7 +149,7 @@ migrations normalmente.
 pytest                 # roda tests/backend com cobertura (ver pyproject.toml)
 ```
 
-48 testes automatizados, sempre contra um SQLite isolado (nunca o banco de
+56 testes automatizados, sempre contra um SQLite isolado (nunca o banco de
 desenvolvimento) — cobrindo autenticação, isolamento multi-tenant com dados
 reais de duas empresas (seções 52/53 da spec), CRUD de todos os cadastros,
 o fluxo de programação/status/timeline e os 3 robôs em background.
@@ -168,11 +170,11 @@ pendente (hardening): Fase 11, documentado futuramente em `docs/SECURITY.md`.
 | 3 | Cadastros (veículos, motoristas, transportadoras, rotas) | ✅ Concluída |
 | 4 | Operações (programação, timeline, status) | ✅ Concluída |
 | — | Notificações + automações em background *(adiantado da seção 41)* | ✅ Concluída |
-| 5 | Dashboard | Planejada |
+| 5 | Dashboard | ✅ Concluída (inclui Ocorrências, seção 14, como pré-requisito) |
 | 6 | Relatórios/exportação | Planejada |
 | 7 | Licenciamento (endpoints + enforcement) | 🔶 Parcial — enforcement de limite de veículos já ativo |
-| 8 | Desktop (PySide6) | 🔶 Em andamento — login, shell, cadastros e operações prontos; faltam dashboard/relatórios |
-| 9 | Testes (cobertura ampla, isolamento multi-tenant) | 🔶 Em andamento — 48 testes já cobrem os módulos acima |
+| 8 | Desktop (PySide6) | 🔶 Em andamento — login, shell, cadastros, operações e dashboard prontos; falta relatórios |
+| 9 | Testes (cobertura ampla, isolamento multi-tenant) | 🔶 Em andamento — 56 testes já cobrem os módulos acima |
 | 10 | Build e instalador | Planejada |
 | 11 | Hardening de segurança | Planejada |
 | 12 | Documentação final | Planejada |

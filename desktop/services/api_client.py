@@ -140,6 +140,25 @@ class ApiClient:
     def get_operations_summary(self, access_token: str, **params) -> dict:
         return self._request("GET", "/api/v1/operations/summary", params=params, access_token=access_token)
 
+    # --- Dashboard (seção 15/16) ---
+
+    def get_dashboard_summary(self, access_token: str, **params) -> dict:
+        return self._request("GET", "/api/v1/dashboard/summary", params=params, access_token=access_token)
+
+    def get_dashboard_charts(self, access_token: str, **params) -> dict:
+        return self._request("GET", "/api/v1/dashboard/charts", params=params, access_token=access_token)
+
+    # --- Ocorrências (seção 14) ---
+
+    def list_occurrences(self, access_token: str, **params) -> dict:
+        return self._list("occurrences", access_token, **params)
+
+    def create_occurrence(self, access_token: str, payload: dict) -> dict:
+        return self._create("occurrences", access_token, payload)
+
+    def update_occurrence(self, access_token: str, occurrence_id: int, payload: dict) -> dict:
+        return self._update("occurrences", access_token, occurrence_id, payload)
+
     def _request(
         self, method: str, path: str, *, json: dict | None = None, params: dict | None = None,
         access_token: str | None = None,

@@ -23,6 +23,7 @@ from services.async_task import ApiWorker
 from ui.carriers_page import CarriersPage
 from ui.dashboard_page import DashboardPage
 from ui.drivers_page import DriversPage
+from ui.occurrences_page import OccurrencesPage
 from ui.operations_page import OperationsPage
 from ui.routes_page import RoutesPage
 from ui.schedules_page import SchedulesPage
@@ -33,7 +34,7 @@ from ui.vehicles_page import VehiclesPage
 # página — None para itens ainda sem tela).
 _NAV_SECTIONS = [
     ("VISÃO GERAL", [
-        ("Dashboard", True, lambda self: DashboardPage(self._session)),
+        ("Dashboard", True, lambda self: DashboardPage(self._api_client, self._session)),
     ]),
     ("CADASTROS", [
         ("Veículos", True, lambda self: VehiclesPage(self._api_client, self._session)),
@@ -44,7 +45,7 @@ _NAV_SECTIONS = [
     ("OPERAÇÃO", [
         ("Programação", True, lambda self: SchedulesPage(self._api_client, self._session)),
         ("Centro de Operações", True, lambda self: OperationsPage(self._api_client, self._session)),
-        ("Ocorrências", False, None),
+        ("Ocorrências", True, lambda self: OccurrencesPage(self._api_client, self._session)),
     ]),
     ("ANÁLISE", [
         ("Relatórios", False, None),
@@ -240,6 +241,13 @@ class MainWindow(QWidget):
     def _toggle_theme(self) -> None:
         self._dark_mode = not self._dark_mode
         self._apply_theme_callback(dark=self._dark_mode)
+        # QSS não estiliza QtCharts — páginas com gráficos (ex. Dashboard)
+        # precisam redesenhá-los na cor certa; convenção: um método
+        # `apply_theme(dark=...)` na página, chamado aqui se existir.
+        for index in self._page_indexes.values():
+            page = self._stack.widget(index)
+            if hasattr(page, "apply_theme"):
+                page.apply_theme(dark=self._dark_mode)
 
     def _handle_logout_clicked(self) -> None:
         if not self._session.refresh_token:
