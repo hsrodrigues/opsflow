@@ -54,6 +54,16 @@ Implementado até agora:
   status com linha do tempo) e Centro de Operações (mesmo visual do mockup
   da especificação — cartões + tabela com badges coloridos).
 
+**Notificações e automações (adiantado da seção 41, "Robôs")**
+- Notificações (seção 20): `/api/v1/notifications`, cada usuário vê as suas
+  + os avisos de toda a empresa.
+- 3 jobs em background (APScheduler, `app/jobs/`), rodando dentro do próprio
+  processo da API: detecção automática de atraso (compara horário previsto
+  + tempo estimado da rota com agora), alerta de CNH vencendo (seção 10) e
+  expiração automática de licença (seção 6) — todos notificam
+  automaticamente os administradores/supervisores da empresa, sem depender
+  de alguém abrir uma tela para "descobrir" o problema.
+
 Planejado, fase a fase — ver [ARCHITECTURE.md](docs/ARCHITECTURE.md) e a
 seção [Roadmap](#roadmap).
 

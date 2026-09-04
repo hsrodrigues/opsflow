@@ -13,6 +13,7 @@ from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging_config import configure_logging
+from app.jobs.scheduler import start_scheduler, stop_scheduler
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -49,6 +50,12 @@ def on_startup() -> None:
         settings.app_version,
         settings.app_env,
     )
+    start_scheduler()
+
+
+@app.on_event("shutdown")
+def on_shutdown() -> None:
+    stop_scheduler()
 
 
 if __name__ == "__main__":

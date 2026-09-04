@@ -122,11 +122,43 @@ Settings) carregadas de um `.env` **nunca versionado** — `.env.example`
 documenta cada variável sem valores reais. `JWT_SECRET` não tem valor padrão
 utilizável em produção (deve ser sempre sobrescrito).
 
-## Ambiente de desenvolvimento local sem Docker
+## Jobs em background (app/jobs/)
 
-Quando Docker/MySQL não estão disponíveis, `DATABASE_URL` pode apontar para
-um arquivo SQLite (`sqlite:///./opsflow_dev.db`) — todo o schema (colunas,
-enums, JSON) foi desenhado para ser válido nos dois dialetos (ver
-`app/models/types.py`). Isso nunca é usado em produção; a migration é
-adicionalmente validada em modo offline contra o dialeto MySQL
-(`alembic upgrade head --sql`) antes de cada entrega.
+Adiantado da seção 41 ("Automações", V2 no roadmap original) porque o valor
+era claro e a infraestrutura já estava reservada na arquitetura
+(APScheduler, seção 2). São funções `run()` simples, cada uma abrindo sua
+própria sessão de banco (`SessionLocal()` — nunca a sessão de uma request) e
+varrendo *todos* os tenants ativos, registradas no `BackgroundScheduler` do
+APScheduler e iniciadas/paradas junto do ciclo de vida do FastAPI
+(`app/main.py`). Rodam dentro do próprio processo da API — não precisam de
+Celery/Redis para o volume esperado do MVP.
+
+- **`delay_detection`** (a cada 5 min): `schedule_item`s ainda ativos cujo
+  horário previsto + tempo estimado da rota já passou viram `ATRASADO`
+  automaticamente, reaproveitando `schedule_service.change_status` (que
+  aceita `actor_id=None` para uma mudança de status iniciada pelo sistema).
+- **`cnh_alerts`** (a cada 24h): motoristas com CNH vencendo em até 30 dias
+  (`DriverRepository.expiring_cnh`) geram uma notificação por destinatário,
+  com deduplicação de 24h (`NotificationRepository.recently_notified`) para
+  não reenviar o mesmo aviso a cada execução.
+- **`license_expiration`** (a cada 60 min): licenças `ACTIVE`/`TRIAL` cujo
+  `expires_at` já passou viram `EXPIRED` automaticamente.
+
+Cada job notifica os usuários `ADMIN_EMPRESA`/`SUPERVISOR` do tenant
+afetado (`app/jobs/recipients.py`). `JOBS_ENABLED=false` desliga o
+scheduler inteiro — usado pela suíte de testes (`tests/backend/conftest.py`)
+para nunca ter uma thread em background competindo com o banco de teste;
+os jobs em si são testados chamando `run()` diretamente
+(`tests/backend/test_jobs.py`).
+
+## Ambiente de desenvolvimento local
+
+O ambiente de desenvolvimento roda contra um MySQL/MariaDB real (via XAMPP,
+`DATABASE_URL=mysql+pymysql://root:@127.0.0.1:3306/opsflow_db` — `root` sem
+senha é o padrão do XAMPP, nunca use isso em produção). Quando Docker/MySQL
+não estão disponíveis, `DATABASE_URL` também pode apontar para um arquivo
+SQLite (`sqlite:///./opsflow_dev.db`) — todo o schema (colunas, enums, JSON)
+foi desenhado para ser válido nos dois dialetos (ver `app/models/types.py`).
+Os testes automatizados (`tests/backend/`) sempre usam SQLite isolado por
+design, independentemente do banco de desenvolvimento configurado — mantém
+a suíte rápida e sem efeito colateral no banco "de verdade".

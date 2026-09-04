@@ -18,6 +18,10 @@ from pathlib import Path
 os.environ.setdefault("DATABASE_URL", "sqlite:///./.pytest_opsflow_test.db")
 os.environ.setdefault("JWT_SECRET", "test-secret-never-used-outside-pytest")
 os.environ.setdefault("APP_ENV", "development")
+# Um scheduler de verdade rodando em thread própria, batendo no banco de
+# teste no timer dele, deixaria a suíte flaky — os jobs são testados
+# chamando `run()` diretamente (ver test_jobs.py), nunca via APScheduler.
+os.environ.setdefault("JOBS_ENABLED", "false")
 
 import pytest  # noqa: E402
 from alembic import command  # noqa: E402

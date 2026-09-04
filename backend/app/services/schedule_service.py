@@ -124,21 +124,26 @@ def update_schedule_item(
 
 
 def change_status(
-    db: Session, tenant_id: int, actor: User, item_id: int, new_status: ScheduleStatus, notes: str | None,
+    db: Session, tenant_id: int, actor_id: int | None, item_id: int, new_status: ScheduleStatus, notes: str | None,
     ip_address: str | None,
 ) -> ScheduleItem:
+    """Advance a schedule item's status. `actor_id=None` records a
+    system-initiated change (e.g. the automatic delay-detection job,
+    `app/jobs/delay_detection.py`) — `AuditMixin`'s `created_by`/`updated_by`
+    and `StatusHistory.changed_by` all accept `NULL` for exactly this case.
+    """
     item = get_schedule_item(db, tenant_id, item_id)
     previous_status = item.status
     now = _utc_now()
 
     item.status = new_status
-    item.updated_by = actor.id
+    item.updated_by = actor_id
 
     operation = item.operation
     if operation is None:
         operation = Operation(
             tenant_id=tenant_id, schedule_item_id=item.id, operation_number="", status=new_status,
-            created_by=actor.id, updated_by=actor.id,
+            created_by=actor_id, updated_by=actor_id,
         )
         db.add(operation)
         db.flush()
@@ -146,7 +151,7 @@ def change_status(
         item.operation = operation
     else:
         operation.status = new_status
-        operation.updated_by = actor.id
+        operation.updated_by = actor_id
 
     if new_status in (ScheduleStatus.AGUARDANDO, ScheduleStatus.EM_FILA) and operation.arrived_at is None:
         operation.arrived_at = now
@@ -159,11 +164,11 @@ def change_status(
     db.add(
         StatusHistory(
             tenant_id=tenant_id, operation_id=operation.id, previous_status=previous_status, new_status=new_status,
-            changed_by=actor.id, changed_at=now, notes=notes,
+            changed_by=actor_id, changed_at=now, notes=notes,
         )
     )
     write_audit_log(
-        db, tenant_id=tenant_id, user_id=actor.id, action=AuditAction.STATUS_CHANGE, table_name="schedule_items",
+        db, tenant_id=tenant_id, user_id=actor_id, action=AuditAction.STATUS_CHANGE, table_name="schedule_items",
         record_id=str(item.id), ip_address=ip_address,
         old_value={"status": previous_status.value}, new_value={"status": new_status.value},
     )

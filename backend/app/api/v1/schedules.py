@@ -74,7 +74,7 @@ def change_schedule_item_status(
     user: User = Depends(require_permission("operations.update_status")), db: Session = Depends(get_db),
 ) -> ScheduleItemOut:
     item = schedule_service.change_status(
-        db, tenant_id, user, item_id, payload.status, payload.notes, _client_ip(request),
+        db, tenant_id, user.id, item_id, payload.status, payload.notes, _client_ip(request),
     )
     return schedule_item_to_out(item)
 

@@ -23,6 +23,9 @@ email-validator==2.2.0
 pyjwt==2.10.1
 argon2-cffi==23.1.0
 
+# --- Jobs em background (seção 41 "Automações" — app/jobs/) ---
+apscheduler==3.10.4
+
 # --- Testes (Fase 1: import/health/schema; ampliado na Fase 9) ---
 pytest==8.3.4
 pytest-cov==6.0.0

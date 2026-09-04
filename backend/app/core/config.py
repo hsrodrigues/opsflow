@@ -74,6 +74,12 @@ class Settings(BaseSettings):
     seed_admin_email: str | None = None
     seed_admin_password: str | None = None
 
+    # --- Jobs em background (seção 41 "Automações" — app/jobs/) ---
+    jobs_enabled: bool = True
+    delay_detection_interval_minutes: int = 5
+    cnh_alert_interval_hours: int = 24
+    license_expiration_interval_minutes: int = 60
+
 
 @lru_cache
 def get_settings() -> Settings:
