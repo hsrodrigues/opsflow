@@ -6,6 +6,7 @@ landing page every user sees right after login.
 from PySide6.QtWidgets import QFrame, QGridLayout, QLabel, QVBoxLayout, QWidget
 
 from app.session import UserSession
+from ui.theme import apply_shadow
 
 _ROLE_LABELS = {
     "SUPER_ADMIN": "Administrador da Plataforma",
@@ -83,6 +84,7 @@ class DashboardPage(QWidget):
     @staticmethod
     def _build_stat_card(label: str, value: str) -> QFrame:
         card = QFrame(objectName="Card")
+        apply_shadow(card, blur=18, y_offset=4, alpha=18)
         layout = QVBoxLayout(card)
         layout.setContentsMargins(18, 16, 18, 16)
         layout.addWidget(QLabel(value, objectName="CardValue"))

@@ -90,6 +90,7 @@ class VehicleDialog(QDialog):
         buttons.button(QDialogButtonBox.StandardButton.Save).setText("Salvar")
         buttons.button(QDialogButtonBox.StandardButton.Save).setObjectName("PrimaryButton")
         buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Cancelar")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setObjectName("SecondaryButton")
         buttons.accepted.connect(self._handle_save_clicked)
         buttons.rejected.connect(self.reject)
         self._buttons = buttons

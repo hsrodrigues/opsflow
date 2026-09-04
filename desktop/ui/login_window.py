@@ -5,6 +5,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import (
     QCheckBox,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -18,6 +19,7 @@ from app.session import UserSession
 from services.api_client import ApiClient
 from services.async_task import ApiWorker
 from services.errors import ApiError
+from ui.theme import apply_shadow
 
 
 class LoginWindow(QWidget):
@@ -43,20 +45,35 @@ class LoginWindow(QWidget):
 
         card = QWidget(objectName="LoginCard")
         card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        apply_shadow(card, blur=40, y_offset=14, alpha=35)
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(36, 36, 36, 28)
         card_layout.setSpacing(6)
 
+        logo = QLabel("O", objectName="LoginLogoGlyph")
+        logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo_wrap = QWidget(objectName="LoginLogo")
+        logo_wrap.setFixedSize(52, 52)
+        logo_layout = QVBoxLayout(logo_wrap)
+        logo_layout.setContentsMargins(0, 0, 0, 0)
+        logo_layout.addWidget(logo)
+        logo_row = QHBoxLayout()
+        logo_row.addStretch(1)
+        logo_row.addWidget(logo_wrap)
+        logo_row.addStretch(1)
+        card_layout.addLayout(logo_row)
+        card_layout.addSpacing(16)
+
         brand = QLabel("OPSFLOW")
         brand.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        brand.setStyleSheet("font-size: 24px; font-weight: 700; letter-spacing: 1px;")
+        brand.setStyleSheet("font-size: 22px; font-weight: 700; letter-spacing: 1px;")
         card_layout.addWidget(brand)
 
         tagline = QLabel("Gestão Operacional Inteligente")
         tagline.setObjectName("Muted")
         tagline.setAlignment(Qt.AlignmentFlag.AlignCenter)
         card_layout.addWidget(tagline)
-        card_layout.addSpacing(20)
+        card_layout.addSpacing(24)
 
         self._error_label = QLabel("")
         self._error_label.setObjectName("ErrorBanner")

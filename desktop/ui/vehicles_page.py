@@ -18,6 +18,7 @@ from app.session import UserSession
 from services.api_client import ApiClient
 from services.async_task import ApiWorker
 from services.errors import ApiError
+from ui.theme import apply_shadow
 from ui.vehicle_dialog import VehicleDialog
 
 _STATUS_FILTER_OPTIONS = [
@@ -29,12 +30,30 @@ _STATUS_FILTER_OPTIONS = [
     ("Bloqueado", "BLOQUEADO"),
 ]
 
+#         status         -> (texto exibido,   categoria do badge)
 _STATUS_DISPLAY = {
-    "DISPONIVEL": "🟢 Disponível", "EM_OPERACAO": "🔵 Em operação", "EM_MANUTENCAO": "🟡 Em manutenção",
-    "INATIVO": "⚪ Inativo", "BLOQUEADO": "🔴 Bloqueado",
+    "DISPONIVEL": ("Disponível", "BadgeSuccess"),
+    "EM_OPERACAO": ("Em operação", "BadgeInfo"),
+    "EM_MANUTENCAO": ("Em manutenção", "BadgeWarning"),
+    "INATIVO": ("Inativo", "BadgeNeutral"),
+    "BLOQUEADO": ("Bloqueado", "BadgeDanger"),
 }
 
 _PAGE_SIZE = 15
+
+
+def _build_status_badge(status: str) -> QWidget:
+    """A small pill-shaped label, styled per status category (`ui/theme.py`)."""
+    text, badge_class = _STATUS_DISPLAY.get(status, (status, "BadgeNeutral"))
+    label = QLabel(text, objectName=badge_class)
+    label.setProperty("badge", "true")
+    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    container = QWidget()
+    layout = QHBoxLayout(container)
+    layout.setContentsMargins(8, 0, 0, 0)
+    layout.addWidget(label)
+    layout.addStretch(1)
+    return container
 
 
 class VehiclesPage(QWidget):
@@ -98,6 +117,10 @@ class VehiclesPage(QWidget):
         self._table.verticalHeader().setVisible(False)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self._table.setAlternatingRowColors(True)
+        self._table.setShowGrid(False)
+        self._table.verticalHeader().setDefaultSectionSize(44)
+        apply_shadow(self._table, blur=20, y_offset=4, alpha=15)
         layout.addWidget(self._table, stretch=1)
 
         pagination = QHBoxLayout()
@@ -160,14 +183,17 @@ class VehiclesPage(QWidget):
         self._table.setRowCount(0)
         for row, vehicle in enumerate(items):
             self._table.insertRow(row)
-            self._table.setItem(row, 0, QTableWidgetItem(vehicle["plate"]))
+            plate_item = QTableWidgetItem(vehicle["plate"])
+            plate_font = plate_item.font()
+            plate_font.setBold(True)
+            plate_item.setFont(plate_font)
+            self._table.setItem(row, 0, plate_item)
             brand_model = " / ".join(filter(None, [vehicle.get("brand"), vehicle.get("model")])) or "—"
             self._table.setItem(row, 1, QTableWidgetItem(brand_model))
             self._table.setItem(row, 2, QTableWidgetItem(str(vehicle.get("year") or "—")))
             carrier_name = self._carriers_by_id.get(vehicle.get("carrier_id"), "—")
             self._table.setItem(row, 3, QTableWidgetItem(carrier_name))
-            status_item = QTableWidgetItem(_STATUS_DISPLAY.get(vehicle["status"], vehicle["status"]))
-            self._table.setItem(row, 4, status_item)
+            self._table.setCellWidget(row, 4, _build_status_badge(vehicle["status"]))
             self._table.setCellWidget(row, 5, self._build_row_actions(vehicle))
 
         self._page_label.setText(
@@ -187,7 +213,7 @@ class VehiclesPage(QWidget):
         edit_button = QPushButton("Editar", objectName="LinkButton")
         edit_button.setCursor(Qt.CursorShape.PointingHandCursor)
         edit_button.clicked.connect(lambda: self._handle_edit_clicked(vehicle))
-        delete_button = QPushButton("Excluir", objectName="LinkButton")
+        delete_button = QPushButton("Excluir", objectName="DangerLinkButton")
         delete_button.setCursor(Qt.CursorShape.PointingHandCursor)
         delete_button.clicked.connect(lambda: self._handle_delete_clicked(vehicle))
         row_layout.addWidget(edit_button)

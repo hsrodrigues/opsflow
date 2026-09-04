@@ -23,21 +23,42 @@ from services.async_task import ApiWorker
 from ui.dashboard_page import DashboardPage
 from ui.vehicles_page import VehiclesPage
 
-# (rótulo, habilitado, fábrica da página — None para itens ainda sem tela)
-_NAV_ITEMS = [
-    ("Dashboard", True, lambda self: DashboardPage(self._session)),
-    ("Veículos", True, lambda self: VehiclesPage(self._api_client, self._session)),
-    ("Motoristas", False, None),
-    ("Transportadoras", False, None),
-    ("Rotas", False, None),
-    ("Programação", False, None),
-    ("Centro de Operações", False, None),
-    ("Ocorrências", False, None),
-    ("Relatórios", False, None),
-    ("Configurações", False, None),
+# Navegação agrupada por seção (padrão comum em ERPs: Visão Geral / Cadastros
+# / Operação / Sistema), cada item como (rótulo, habilitado, fábrica da
+# página — None para itens ainda sem tela).
+_NAV_SECTIONS = [
+    ("VISÃO GERAL", [
+        ("Dashboard", True, lambda self: DashboardPage(self._session)),
+    ]),
+    ("CADASTROS", [
+        ("Veículos", True, lambda self: VehiclesPage(self._api_client, self._session)),
+        ("Motoristas", False, None),
+        ("Transportadoras", False, None),
+        ("Rotas", False, None),
+    ]),
+    ("OPERAÇÃO", [
+        ("Programação", False, None),
+        ("Centro de Operações", False, None),
+        ("Ocorrências", False, None),
+    ]),
+    ("ANÁLISE", [
+        ("Relatórios", False, None),
+    ]),
+    ("SISTEMA", [
+        ("Configurações", False, None),
+    ]),
 ]
 
 _HEALTH_POLL_INTERVAL_MS = 15_000
+
+
+def _initials(name: str) -> str:
+    parts = [p for p in name.replace("@", " ").split() if p]
+    if not parts:
+        return "?"
+    if len(parts) == 1:
+        return parts[0][:2].upper()
+    return (parts[0][0] + parts[-1][0]).upper()
 
 
 def _repolish(widget: QWidget) -> None:
@@ -108,20 +129,38 @@ class MainWindow(QWidget):
         layout.setContentsMargins(16, 20, 16, 20)
         layout.setSpacing(2)
 
-        layout.addWidget(QLabel("OPSFLOW", objectName="SidebarBrand"))
-        layout.addWidget(QLabel("Gestão Operacional", objectName="SidebarTagline"))
-        layout.addSpacing(24)
+        header = QHBoxLayout()
+        header.setSpacing(10)
+        mark = QLabel("O", objectName="LoginLogoGlyph")
+        mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        mark_wrap = QWidget(objectName="LoginLogo")
+        mark_wrap.setFixedSize(30, 30)
+        mark_layout = QVBoxLayout(mark_wrap)
+        mark_layout.setContentsMargins(0, 0, 0, 0)
+        mark_layout.addWidget(mark)
+        header.addWidget(mark_wrap)
+        brand_col = QVBoxLayout()
+        brand_col.setSpacing(0)
+        brand_col.addWidget(QLabel("OPSFLOW", objectName="SidebarBrand"))
+        brand_col.addWidget(QLabel("Gestão Operacional", objectName="SidebarTagline"))
+        header.addLayout(brand_col)
+        header.addStretch(1)
+        layout.addLayout(header)
+        layout.addSpacing(18)
 
-        for label, enabled, _factory in _NAV_ITEMS:
-            button = QPushButton(label, objectName="NavItem")
-            button.setCheckable(True)
-            button.setEnabled(enabled)
-            if enabled:
-                button.clicked.connect(lambda _checked, name=label: self._navigate_to(name))
-            else:
-                button.setToolTip("Disponível em uma próxima fase")
-            layout.addWidget(button)
-            self._nav_buttons.append(button)
+        for section_index, (section_label, items) in enumerate(_NAV_SECTIONS):
+            if section_index > 0:
+                layout.addWidget(QLabel(section_label, objectName="SidebarSection"))
+            for label, enabled, _factory in items:
+                button = QPushButton(label, objectName="NavItem")
+                button.setCheckable(True)
+                button.setEnabled(enabled)
+                if enabled:
+                    button.clicked.connect(lambda _checked, name=label: self._navigate_to(name))
+                else:
+                    button.setToolTip("Disponível em uma próxima fase")
+                layout.addWidget(button)
+                self._nav_buttons.append(button)
 
         layout.addStretch(1)
         return sidebar
@@ -146,11 +185,17 @@ class MainWindow(QWidget):
         theme_button.setFixedSize(32, 32)
         theme_button.clicked.connect(self._toggle_theme)
         layout.addWidget(theme_button)
-        layout.addSpacing(16)
+        layout.addSpacing(18)
+
+        avatar = QLabel(_initials(self._session.full_name or self._session.email or "?"), objectName="Avatar")
+        avatar.setFixedSize(30, 30)
+        avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(avatar)
+        layout.addSpacing(8)
 
         user_label = QLabel(self._session.full_name or self._session.email or "")
         layout.addWidget(user_label)
-        layout.addSpacing(8)
+        layout.addSpacing(12)
 
         logout_button = QPushButton("Sair", objectName="LinkButton")
         logout_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -175,7 +220,8 @@ class MainWindow(QWidget):
 
     def _navigate_to(self, label: str) -> None:
         if label not in self._page_indexes:
-            factory = next(f for lbl, _enabled, f in _NAV_ITEMS if lbl == label)
+            all_items = [item for _section, items in _NAV_SECTIONS for item in items]
+            factory = next(f for lbl, _enabled, f in all_items if lbl == label)
             page = factory(self)
             self._page_indexes[label] = self._stack.addWidget(page)
 
