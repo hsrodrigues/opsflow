@@ -96,6 +96,20 @@ class ApiClient:
     def delete_carrier(self, access_token: str, carrier_id: int) -> None:
         self._delete("carriers", access_token, carrier_id)
 
+    # --- Rotas (seção 12) ---
+
+    def list_routes(self, access_token: str, **params) -> dict:
+        return self._list("routes", access_token, **params)
+
+    def create_route(self, access_token: str, payload: dict) -> dict:
+        return self._create("routes", access_token, payload)
+
+    def update_route(self, access_token: str, route_id: int, payload: dict) -> dict:
+        return self._update("routes", access_token, route_id, payload)
+
+    def delete_route(self, access_token: str, route_id: int) -> None:
+        self._delete("routes", access_token, route_id)
+
     def _request(
         self, method: str, path: str, *, json: dict | None = None, params: dict | None = None,
         access_token: str | None = None,

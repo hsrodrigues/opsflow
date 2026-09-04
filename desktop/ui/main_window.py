@@ -23,6 +23,7 @@ from services.async_task import ApiWorker
 from ui.carriers_page import CarriersPage
 from ui.dashboard_page import DashboardPage
 from ui.drivers_page import DriversPage
+from ui.routes_page import RoutesPage
 from ui.vehicles_page import VehiclesPage
 
 # Navegação agrupada por seção (padrão comum em ERPs: Visão Geral / Cadastros
@@ -36,7 +37,7 @@ _NAV_SECTIONS = [
         ("Veículos", True, lambda self: VehiclesPage(self._api_client, self._session)),
         ("Motoristas", True, lambda self: DriversPage(self._api_client, self._session)),
         ("Transportadoras", True, lambda self: CarriersPage(self._api_client, self._session)),
-        ("Rotas", False, None),
+        ("Rotas", True, lambda self: RoutesPage(self._api_client, self._session)),
     ]),
     ("OPERAÇÃO", [
         ("Programação", False, None),

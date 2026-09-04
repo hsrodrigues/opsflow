@@ -30,13 +30,15 @@ Implementado até agora:
   topbar, tema claro/escuro, indicador de conexão) — adiantados da Fase 8
   para permitir validação visual desde já.
 
-**Fase 3 — Cadastros (em andamento)**
-- CRUD completo de Transportadoras, Motoristas e Veículos: busca, filtros,
-  paginação, validação de duplicidade (CNPJ/CPF/placa), soft delete,
-  enforcement do limite de veículos do plano (seção 6), trilha de auditoria.
-- Desktop: tela de Veículos (seção 9) completa — busca, filtro por status,
-  paginação, criar/editar/excluir com confirmação. Motoristas e
-  Transportadoras seguem o mesmo backend; suas telas vêm a seguir.
+**Fase 3 — Cadastros (concluída)**
+- CRUD completo de Transportadoras, Motoristas, Veículos e Rotas: busca,
+  filtros, paginação, validação de duplicidade (CNPJ/CPF/placa), soft
+  delete, enforcement do limite de veículos do plano (seção 6), trilha de
+  auditoria. Rotas resolve Origem/Destino para `locations` reaproveitáveis
+  (find-or-create), já pronto para a integração de mapas da seção 22.
+- Desktop: as 4 telas de cadastro completas — busca, filtro por status,
+  paginação, criar/editar (diálogo modal)/excluir com confirmação — com
+  visual padronizado (badges de status, alerta de CNH vencendo).
 
 Planejado, fase a fase — ver [ARCHITECTURE.md](docs/ARCHITECTURE.md) e a
 seção [Roadmap](#roadmap).
@@ -145,12 +147,12 @@ pendente (hardening): Fase 11, documentado futuramente em `docs/SECURITY.md`.
 |---|---|---|
 | 1 | Estrutura, banco, migrations, backend skeleton, config, Docker | ✅ Concluída |
 | 2 | Autenticação e multi-tenancy | ✅ Concluída |
-| 3 | Cadastros (veículos, motoristas, transportadoras, rotas) | 🔶 Em andamento (veículos/motoristas/transportadoras prontos; rotas pendente) |
+| 3 | Cadastros (veículos, motoristas, transportadoras, rotas) | ✅ Concluída |
 | 4 | Operações (programação, timeline, status) | Planejada |
 | 5 | Dashboard | Planejada |
 | 6 | Relatórios/exportação | Planejada |
 | 7 | Licenciamento (endpoints + enforcement) | Parcial (enforcement de limite de veículos já ativo) |
-| 8 | Desktop (PySide6) | 🔶 Em andamento (login, shell e tela de Veículos adiantados) |
+| 8 | Desktop (PySide6) | 🔶 Em andamento (login, shell e cadastros adiantados; faltam operações/dashboard/relatórios) |
 | 9 | Testes (cobertura ampla, isolamento multi-tenant) | Planejada |
 | 10 | Build e instalador | Planejada |
 | 11 | Hardening de segurança | Planejada |
