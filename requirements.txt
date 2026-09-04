@@ -1,0 +1,29 @@
+# OpsFlow — dependências do backend (FastAPI).
+# Novas dependências devem ser adicionadas somente quando a fase que as usa
+# for implementada, para manter a superfície de ataque e o tempo de build
+# enxutos (ver docs/ARCHITECTURE.md).
+
+# --- Web framework / servidor ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+
+# --- ORM / banco de dados ---
+sqlalchemy==2.0.36
+alembic==1.14.0
+pymysql==1.1.1
+cryptography==44.0.0
+
+# --- Validação / configuração ---
+pydantic==2.10.4
+pydantic-settings==2.7.1
+email-validator==2.2.0
+
+# --- Autenticação / segurança ---
+pyjwt==2.10.1
+argon2-cffi==23.1.0
+
+# --- Testes (Fase 1: import/health/schema; ampliado na Fase 9) ---
+pytest==8.3.4
+pytest-cov==6.0.0
+httpx==0.28.1

@@ -1,0 +1,17 @@
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["backend"]
+addopts = "-ra --cov=app --cov-report=term-missing"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+src = ["backend/app"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.black]
+line-length = 110
+target-version = ["py312"]

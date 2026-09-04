@@ -1,0 +1,56 @@
+# Ambiente de desenvolvimento (seção 36): `docker compose -f docker/docker-compose.yml up -d`
+# a partir da raiz do projeto. Requer JWT_SECRET definido (via .env ao lado
+# deste arquivo, ou exportado no ambiente) — nunca tem um valor padrão aqui.
+name: opsflow
+
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-opsflow_db}
+      MYSQL_USER: ${MYSQL_USER:-opsflow}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-opsflow}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-opsflow_root}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-opsflow_root}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_ENV: development
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-opsflow}:${MYSQL_PASSWORD:-opsflow}@mysql:3306/${MYSQL_DATABASE:-opsflow_db}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET em docker/.env ou no ambiente antes de subir o compose}
+      LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
+    ports:
+      - "8000:8000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ../logs:/app/backend/logs
+
+volumes:
+  mysql_data:
+  redis_data:

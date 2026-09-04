@@ -1,0 +1,12 @@
+**/__pycache__
+**/*.pyc
+.venv
+.git
+.pytest_cache
+.mypy_cache
+.ruff_cache
+htmlcov
+*.db
+*.sqlite3
+logs/*.log
+.env

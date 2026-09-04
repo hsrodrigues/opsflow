@@ -1,0 +1,709 @@
+"""initial schema
+
+Cria todas as 29 tabelas do MVP (seção 8 da especificação) e semeia o dado
+de referência do sistema: os 5 papéis fixos do RBAC + sua matriz de
+permissões (seção 4) e o catálogo comercial de planos (seção 7) —
+diretamente nesta migration, e não em `database/seeds/`, porque roles,
+permissions e plans são vocabulário do próprio sistema, não dado de
+demonstração de um tenant.
+
+Revision ID: 5c82cbb37726
+Revises:
+Create Date: 2026-09-04 08:52:02.149549
+"""
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy import table, column
+
+
+# revision identifiers, used by Alembic.
+revision: str = '5c82cbb37726'
+down_revision: Union[str, None] = None
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+# --- Catálogo comercial de planos (seção 7) ---
+# Dado de referência do sistema (não de um tenant específico).
+# `max_users`/`max_vehicles` = None → ilimitado.
+_PLANS = [
+    (1, "STARTER", "Starter", 3, 100,
+     {"dashboard": "basico", "programacao": True, "ocorrencias": True}),
+    (2, "PROFESSIONAL", "Professional", 10, 500,
+     {"dashboards_completos": True, "relatorios": True, "exportacao_excel": True, "auditoria": True}),
+    (3, "BUSINESS", "Business", 30, 2000,
+     {"apis": True, "automacoes": True, "integracoes": True}),
+    (4, "ENTERPRISE", "Enterprise", None, None,
+     {"integracoes_customizadas": True, "suporte_prioritario": True}),
+]
+
+# --- Dado de referência do RBAC (seção 4) ---
+# IDs fixos e explícitos: esta é a migration inicial, as tabelas estão
+# vazias, então não há risco de colisão, e a fixidez torna a matriz
+# roles×permissions abaixo legível sem precisar consultar o banco.
+_ROLES = [
+    (1, "SUPER_ADMIN", "Administrador da plataforma"),
+    (2, "ADMIN_EMPRESA", "Administrador do cliente"),
+    (3, "SUPERVISOR", "Supervisor operacional"),
+    (4, "OPERADOR", "Operador"),
+    (5, "VISUALIZADOR", "Somente leitura"),
+]
+
+_PERMISSIONS = [
+    (1, "tenants.manage", "Criar e gerenciar empresas clientes"),
+    (2, "plans.manage", "Gerenciar planos comerciais"),
+    (3, "licenses.manage", "Gerenciar licenças"),
+    (4, "users.view", "Consultar usuários"),
+    (5, "users.manage", "Criar, editar e remover usuários"),
+    (6, "vehicles.view", "Consultar veículos"),
+    (7, "vehicles.manage", "Criar, editar e remover veículos"),
+    (8, "drivers.view", "Consultar motoristas"),
+    (9, "drivers.manage", "Criar, editar e remover motoristas"),
+    (10, "carriers.view", "Consultar transportadoras"),
+    (11, "carriers.manage", "Criar, editar e remover transportadoras"),
+    (12, "routes.view", "Consultar rotas"),
+    (13, "routes.manage", "Criar, editar e remover rotas"),
+    (14, "schedules.view", "Consultar programação"),
+    (15, "schedules.manage", "Criar e editar programação"),
+    (16, "operations.view", "Consultar operações"),
+    (17, "operations.update_status", "Alterar status de uma operação"),
+    (18, "occurrences.view", "Consultar ocorrências"),
+    (19, "occurrences.manage", "Registrar e editar ocorrências"),
+    (20, "dashboard.view", "Visualizar dashboard e indicadores"),
+    (21, "reports.view", "Visualizar relatórios"),
+    (22, "reports.export", "Exportar relatórios (Excel/CSV/PDF)"),
+    (23, "notifications.view", "Visualizar notificações"),
+    (24, "audit.view", "Consultar trilha de auditoria"),
+    (25, "settings.manage", "Configurar parâmetros do sistema"),
+]
+
+# Cada role recebe uma lista de códigos de permission (seção 4).
+_ROLE_PERMISSION_CODES = {
+    "SUPER_ADMIN": [code for _, code, _ in _PERMISSIONS],  # todas
+    "ADMIN_EMPRESA": [
+        "users.view", "users.manage",
+        "vehicles.view", "vehicles.manage",
+        "drivers.view", "drivers.manage",
+        "carriers.view", "carriers.manage",
+        "routes.view", "routes.manage",
+        "schedules.view", "schedules.manage",
+        "operations.view", "operations.update_status",
+        "occurrences.view", "occurrences.manage",
+        "dashboard.view", "reports.view", "reports.export",
+        "notifications.view", "audit.view", "settings.manage",
+    ],
+    "SUPERVISOR": [
+        "vehicles.view", "drivers.view", "carriers.view", "routes.view",
+        "schedules.view", "schedules.manage",
+        "operations.view", "operations.update_status",
+        "occurrences.view", "occurrences.manage",
+        "dashboard.view", "reports.view", "reports.export", "notifications.view",
+    ],
+    "OPERADOR": [
+        "vehicles.view", "schedules.view",
+        "operations.view", "operations.update_status",
+        "occurrences.view", "occurrences.manage", "notifications.view",
+    ],
+    "VISUALIZADOR": [
+        "vehicles.view", "drivers.view", "carriers.view", "routes.view",
+        "schedules.view", "operations.view", "occurrences.view",
+        "dashboard.view", "reports.view", "notifications.view",
+    ],
+}
+
+
+def upgrade() -> None:
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.create_table('permissions',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('code', sa.String(length=100), nullable=False),
+    sa.Column('description', sa.String(length=255), nullable=True),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('code')
+    )
+    op.create_table('plans',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('code', sa.Enum('STARTER', 'PROFESSIONAL', 'BUSINESS', 'ENTERPRISE', name='plancode_enum', native_enum=False, length=20), nullable=False),
+    sa.Column('name', sa.String(length=100), nullable=False),
+    sa.Column('max_users', sa.Integer(), nullable=True),
+    sa.Column('max_vehicles', sa.Integer(), nullable=True),
+    sa.Column('features', sa.JSON(), nullable=False),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('code')
+    )
+    op.create_table('roles',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('code', sa.Enum('SUPER_ADMIN', 'ADMIN_EMPRESA', 'SUPERVISOR', 'OPERADOR', 'VISUALIZADOR', name='userrolecode_enum', native_enum=False, length=20), nullable=False),
+    sa.Column('name', sa.String(length=100), nullable=False),
+    sa.Column('description', sa.String(length=255), nullable=True),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('code')
+    )
+    op.create_table('tenants',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('legal_name', sa.String(length=200), nullable=False),
+    sa.Column('trade_name', sa.String(length=200), nullable=True),
+    sa.Column('cnpj', sa.String(length=18), nullable=True),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('cnpj')
+    )
+    op.create_table('integration_configs',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('integration_type', sa.String(length=50), nullable=False),
+    sa.Column('config', sa.JSON(), nullable=False),
+    sa.Column('status', sa.String(length=20), nullable=False),
+    sa.Column('last_synced_at', sa.DateTime(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=False),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_integration_configs_tenant_id'), 'integration_configs', ['tenant_id'], unique=False)
+    op.create_table('licenses',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=False),
+    sa.Column('plan_id', sa.BigInteger(), nullable=False),
+    sa.Column('license_key', sa.String(length=64), nullable=False),
+    sa.Column('status', sa.Enum('ACTIVE', 'TRIAL', 'SUSPENDED', 'EXPIRED', 'CANCELLED', name='licensestatus_enum', native_enum=False, length=20), nullable=False),
+    sa.Column('issued_at', sa.DateTime(), nullable=False),
+    sa.Column('expires_at', sa.DateTime(), nullable=True),
+    sa.Column('max_users', sa.Integer(), nullable=True),
+    sa.Column('max_vehicles', sa.Integer(), nullable=True),
+    sa.Column('features', sa.JSON(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.ForeignKeyConstraint(['plan_id'], ['plans.id'], ),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('license_key')
+    )
+    op.create_index(op.f('ix_licenses_tenant_id'), 'licenses', ['tenant_id'], unique=False)
+    op.create_table('locations',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('name', sa.String(length=150), nullable=False),
+    sa.Column('address', sa.String(length=255), nullable=True),
+    sa.Column('city', sa.String(length=100), nullable=True),
+    sa.Column('state', sa.String(length=2), nullable=True),
+    sa.Column('latitude', sa.Numeric(precision=9, scale=6), nullable=True),
+    sa.Column('longitude', sa.Numeric(precision=9, scale=6), nullable=True),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=False),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_locations_tenant_id'), 'locations', ['tenant_id'], unique=False)
+    op.create_table('occurrence_types',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('name', sa.String(length=100), nullable=False),
+    sa.Column('description', sa.String(length=255), nullable=True),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=False),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_occurrence_types_tenant_id'), 'occurrence_types', ['tenant_id'], unique=False)
+    op.create_table('role_permissions',
+    sa.Column('role_id', sa.BigInteger(), nullable=False),
+    sa.Column('permission_id', sa.BigInteger(), nullable=False),
+    sa.ForeignKeyConstraint(['permission_id'], ['permissions.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['role_id'], ['roles.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('role_id', 'permission_id')
+    )
+    op.create_table('subscriptions',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=False),
+    sa.Column('plan_id', sa.BigInteger(), nullable=False),
+    sa.Column('status', sa.String(length=20), nullable=False),
+    sa.Column('started_at', sa.DateTime(), nullable=False),
+    sa.Column('current_period_end', sa.DateTime(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.ForeignKeyConstraint(['plan_id'], ['plans.id'], ),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_subscriptions_tenant_id'), 'subscriptions', ['tenant_id'], unique=False)
+    op.create_table('users',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=True),
+    sa.Column('email', sa.String(length=255), nullable=False),
+    sa.Column('password_hash', sa.String(length=255), nullable=False),
+    sa.Column('full_name', sa.String(length=200), nullable=False),
+    sa.Column('phone', sa.String(length=30), nullable=True),
+    sa.Column('status', sa.Enum('ATIVO', 'INATIVO', 'BLOQUEADO', name='userstatus_enum', native_enum=False, length=20), nullable=False),
+    sa.Column('failed_login_attempts', sa.Integer(), nullable=False),
+    sa.Column('locked_until', sa.DateTime(), nullable=True),
+    sa.Column('last_login_at', sa.DateTime(), nullable=True),
+    sa.Column('remember_login', sa.Boolean(), nullable=False),
+    sa.Column('deleted_at', sa.DateTime(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
+    op.create_index(op.f('ix_users_tenant_id'), 'users', ['tenant_id'], unique=False)
+    op.create_table('vehicle_types',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('name', sa.String(length=100), nullable=False),
+    sa.Column('description', sa.String(length=255), nullable=True),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=False),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_vehicle_types_tenant_id'), 'vehicle_types', ['tenant_id'], unique=False)
+    op.create_table('api_keys',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('name', sa.String(length=100), nullable=False),
+    sa.Column('key_hash', sa.String(length=128), nullable=False),
+    sa.Column('scopes', sa.JSON(), nullable=False),
+    sa.Column('status', sa.String(length=20), nullable=False),
+    sa.Column('last_used_at', sa.DateTime(), nullable=True),
+    sa.Column('expires_at', sa.DateTime(), nullable=True),
+    sa.Column('created_by', sa.BigInteger(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=False),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('key_hash')
+    )
+    op.create_index(op.f('ix_api_keys_tenant_id'), 'api_keys', ['tenant_id'], unique=False)
+    op.create_table('audit_logs',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=True),
+    sa.Column('user_id', sa.BigInteger(), nullable=True),
+    sa.Column('action', sa.Enum('CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'EXPORT', 'IMPORT', 'STATUS_CHANGE', name='auditaction_enum', native_enum=False, length=20), nullable=False),
+    sa.Column('table_name', sa.String(length=100), nullable=True),
+    sa.Column('record_id', sa.String(length=50), nullable=True),
+    sa.Column('ip_address', sa.String(length=45), nullable=True),
+    sa.Column('old_value', sa.JSON(), nullable=True),
+    sa.Column('new_value', sa.JSON(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_audit_logs_tenant_id'), 'audit_logs', ['tenant_id'], unique=False)
+    op.create_table('carriers',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('legal_name', sa.String(length=200), nullable=False),
+    sa.Column('trade_name', sa.String(length=200), nullable=True),
+    sa.Column('cnpj', sa.String(length=18), nullable=True),
+    sa.Column('contact_name', sa.String(length=150), nullable=True),
+    sa.Column('phone', sa.String(length=30), nullable=True),
+    sa.Column('email', sa.String(length=255), nullable=True),
+    sa.Column('status', sa.Enum('ATIVO', 'INATIVO', 'BLOQUEADO', name='carrierstatus_enum', native_enum=False, length=20), nullable=False),
+    sa.Column('notes', sa.String(length=1000), nullable=True),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=False),
+    sa.Column('created_by', sa.BigInteger(), nullable=True),
+    sa.Column('updated_by', sa.BigInteger(), nullable=True),
+    sa.Column('deleted_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['updated_by'], ['users.id'], ondelete='SET NULL'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_carriers_cnpj'), 'carriers', ['cnpj'], unique=False)
+    op.create_index(op.f('ix_carriers_tenant_id'), 'carriers', ['tenant_id'], unique=False)
+    op.create_table('notifications',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('user_id', sa.BigInteger(), nullable=True),
+    sa.Column('title', sa.String(length=200), nullable=False),
+    sa.Column('message', sa.Text(), nullable=False),
+    sa.Column('severity', sa.Enum('INFO', 'WARNING', 'CRITICAL', 'SUCCESS', name='notificationseverity_enum', native_enum=False, length=20), nullable=False),
+    sa.Column('related_entity_type', sa.String(length=50), nullable=True),
+    sa.Column('related_entity_id', sa.BigInteger(), nullable=True),
+    sa.Column('read_at', sa.DateTime(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=False),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_notifications_tenant_id'), 'notifications', ['tenant_id'], unique=False)
+    op.create_index(op.f('ix_notifications_user_id'), 'notifications', ['user_id'], unique=False)
+    op.create_table('password_reset_tokens',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('user_id', sa.BigInteger(), nullable=False),
+    sa.Column('token_hash', sa.String(length=128), nullable=False),
+    sa.Column('expires_at', sa.DateTime(), nullable=False),
+    sa.Column('used_at', sa.DateTime(), nullable=True),
+    sa.Column('used', sa.Boolean(), nullable=False),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('token_hash')
+    )
+    op.create_index(op.f('ix_password_reset_tokens_user_id'), 'password_reset_tokens', ['user_id'], unique=False)
+    op.create_table('refresh_tokens',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('user_id', sa.BigInteger(), nullable=False),
+    sa.Column('token_hash', sa.String(length=128), nullable=False),
+    sa.Column('issued_at', sa.DateTime(), nullable=False),
+    sa.Column('expires_at', sa.DateTime(), nullable=False),
+    sa.Column('revoked_at', sa.DateTime(), nullable=True),
+    sa.Column('ip_address', sa.String(length=45), nullable=True),
+    sa.Column('user_agent', sa.String(length=255), nullable=True),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('token_hash')
+    )
+    op.create_index(op.f('ix_refresh_tokens_user_id'), 'refresh_tokens', ['user_id'], unique=False)
+    op.create_table('routes',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('name', sa.String(length=150), nullable=False),
+    sa.Column('origin_location_id', sa.BigInteger(), nullable=False),
+    sa.Column('destination_location_id', sa.BigInteger(), nullable=False),
+    sa.Column('distance_km', sa.Numeric(precision=8, scale=2), nullable=True),
+    sa.Column('estimated_time_minutes', sa.Integer(), nullable=True),
+    sa.Column('operation_type', sa.String(length=50), nullable=True),
+    sa.Column('status', sa.Enum('ATIVA', 'INATIVA', name='routestatus_enum', native_enum=False, length=20), nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=False),
+    sa.Column('created_by', sa.BigInteger(), nullable=True),
+    sa.Column('updated_by', sa.BigInteger(), nullable=True),
+    sa.Column('deleted_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['destination_location_id'], ['locations.id'], ),
+    sa.ForeignKeyConstraint(['origin_location_id'], ['locations.id'], ),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['updated_by'], ['users.id'], ondelete='SET NULL'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_routes_tenant_id'), 'routes', ['tenant_id'], unique=False)
+    op.create_table('schedules',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('schedule_date', sa.Date(), nullable=False),
+    sa.Column('shift', sa.String(length=20), nullable=False),
+    sa.Column('notes', sa.String(length=1000), nullable=True),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=False),
+    sa.Column('created_by', sa.BigInteger(), nullable=True),
+    sa.Column('updated_by', sa.BigInteger(), nullable=True),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['updated_by'], ['users.id'], ondelete='SET NULL'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_schedules_schedule_date'), 'schedules', ['schedule_date'], unique=False)
+    op.create_index(op.f('ix_schedules_tenant_id'), 'schedules', ['tenant_id'], unique=False)
+    op.create_table('system_settings',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=True),
+    sa.Column('key', sa.String(length=100), nullable=False),
+    sa.Column('value', sa.JSON(), nullable=True),
+    sa.Column('updated_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_by', sa.BigInteger(), nullable=True),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['updated_by'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('tenant_id', 'key', name='uq_system_settings_tenant_key')
+    )
+    op.create_index(op.f('ix_system_settings_tenant_id'), 'system_settings', ['tenant_id'], unique=False)
+    op.create_table('user_roles',
+    sa.Column('user_id', sa.BigInteger(), nullable=False),
+    sa.Column('role_id', sa.BigInteger(), nullable=False),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=True),
+    sa.ForeignKeyConstraint(['role_id'], ['roles.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('user_id', 'role_id')
+    )
+    op.create_index(op.f('ix_user_roles_tenant_id'), 'user_roles', ['tenant_id'], unique=False)
+    op.create_table('drivers',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('full_name', sa.String(length=200), nullable=False),
+    sa.Column('cpf', sa.String(length=14), nullable=False),
+    sa.Column('cnh_number', sa.String(length=20), nullable=True),
+    sa.Column('cnh_category', sa.String(length=5), nullable=True),
+    sa.Column('cnh_expiry', sa.Date(), nullable=True),
+    sa.Column('phone', sa.String(length=30), nullable=True),
+    sa.Column('carrier_id', sa.BigInteger(), nullable=True),
+    sa.Column('status', sa.Enum('ATIVO', 'INATIVO', 'BLOQUEADO', name='driverstatus_enum', native_enum=False, length=20), nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=False),
+    sa.Column('created_by', sa.BigInteger(), nullable=True),
+    sa.Column('updated_by', sa.BigInteger(), nullable=True),
+    sa.Column('deleted_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['carrier_id'], ['carriers.id'], ),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['updated_by'], ['users.id'], ondelete='SET NULL'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_drivers_cpf'), 'drivers', ['cpf'], unique=False)
+    op.create_index(op.f('ix_drivers_tenant_id'), 'drivers', ['tenant_id'], unique=False)
+    op.create_table('vehicles',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('plate', sa.String(length=10), nullable=False),
+    sa.Column('renavam', sa.String(length=20), nullable=True),
+    sa.Column('vehicle_type_id', sa.BigInteger(), nullable=True),
+    sa.Column('brand', sa.String(length=100), nullable=True),
+    sa.Column('model', sa.String(length=100), nullable=True),
+    sa.Column('year', sa.SmallInteger(), nullable=True),
+    sa.Column('carrier_id', sa.BigInteger(), nullable=True),
+    sa.Column('capacity', sa.Numeric(precision=10, scale=2), nullable=True),
+    sa.Column('status', sa.Enum('DISPONIVEL', 'EM_OPERACAO', 'EM_MANUTENCAO', 'INATIVO', 'BLOQUEADO', name='vehiclestatus_enum', native_enum=False, length=20), nullable=False),
+    sa.Column('current_driver_id', sa.BigInteger(), nullable=True),
+    sa.Column('notes', sa.String(length=1000), nullable=True),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=False),
+    sa.Column('created_by', sa.BigInteger(), nullable=True),
+    sa.Column('updated_by', sa.BigInteger(), nullable=True),
+    sa.Column('deleted_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['carrier_id'], ['carriers.id'], ),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['current_driver_id'], ['drivers.id'], ),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['updated_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['vehicle_type_id'], ['vehicle_types.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_vehicles_plate'), 'vehicles', ['plate'], unique=False)
+    op.create_index(op.f('ix_vehicles_tenant_id'), 'vehicles', ['tenant_id'], unique=False)
+    op.create_table('schedule_items',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('schedule_id', sa.BigInteger(), nullable=False),
+    sa.Column('route_id', sa.BigInteger(), nullable=False),
+    sa.Column('carrier_id', sa.BigInteger(), nullable=True),
+    sa.Column('vehicle_id', sa.BigInteger(), nullable=True),
+    sa.Column('driver_id', sa.BigInteger(), nullable=True),
+    sa.Column('scheduled_at', sa.DateTime(), nullable=False),
+    sa.Column('cargo_description', sa.String(length=255), nullable=True),
+    sa.Column('quantity', sa.Integer(), nullable=True),
+    sa.Column('notes', sa.String(length=1000), nullable=True),
+    sa.Column('status', sa.Enum('PROGRAMADO', 'AGUARDANDO', 'EM_FILA', 'EM_OPERACAO', 'CONCLUIDO', 'ATRASADO', 'CANCELADO', name='schedulestatus_enum', native_enum=False, length=20), nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=False),
+    sa.Column('created_by', sa.BigInteger(), nullable=True),
+    sa.Column('updated_by', sa.BigInteger(), nullable=True),
+    sa.Column('deleted_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['carrier_id'], ['carriers.id'], ),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['driver_id'], ['drivers.id'], ),
+    sa.ForeignKeyConstraint(['route_id'], ['routes.id'], ),
+    sa.ForeignKeyConstraint(['schedule_id'], ['schedules.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['updated_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['vehicle_id'], ['vehicles.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_schedule_items_schedule_id'), 'schedule_items', ['schedule_id'], unique=False)
+    op.create_index(op.f('ix_schedule_items_tenant_id'), 'schedule_items', ['tenant_id'], unique=False)
+    op.create_table('operations',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('schedule_item_id', sa.BigInteger(), nullable=False),
+    sa.Column('operation_number', sa.String(length=20), nullable=False),
+    sa.Column('status', sa.Enum('PROGRAMADO', 'AGUARDANDO', 'EM_FILA', 'EM_OPERACAO', 'CONCLUIDO', 'ATRASADO', 'CANCELADO', name='schedulestatus_enum', native_enum=False, length=20), nullable=False),
+    sa.Column('arrived_at', sa.DateTime(), nullable=True),
+    sa.Column('started_at', sa.DateTime(), nullable=True),
+    sa.Column('completed_at', sa.DateTime(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=False),
+    sa.Column('created_by', sa.BigInteger(), nullable=True),
+    sa.Column('updated_by', sa.BigInteger(), nullable=True),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['schedule_item_id'], ['schedule_items.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['updated_by'], ['users.id'], ondelete='SET NULL'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('schedule_item_id')
+    )
+    op.create_index(op.f('ix_operations_operation_number'), 'operations', ['operation_number'], unique=False)
+    op.create_index(op.f('ix_operations_tenant_id'), 'operations', ['tenant_id'], unique=False)
+    op.create_table('occurrences',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('occurrence_type_id', sa.BigInteger(), nullable=False),
+    sa.Column('operation_id', sa.BigInteger(), nullable=True),
+    sa.Column('vehicle_id', sa.BigInteger(), nullable=True),
+    sa.Column('driver_id', sa.BigInteger(), nullable=True),
+    sa.Column('responsible_user_id', sa.BigInteger(), nullable=True),
+    sa.Column('description', sa.Text(), nullable=False),
+    sa.Column('severity', sa.Enum('BAIXA', 'MEDIA', 'ALTA', 'CRITICA', name='occurrenceseverity_enum', native_enum=False, length=20), nullable=False),
+    sa.Column('status', sa.Enum('ABERTA', 'EM_ANALISE', 'RESOLVIDA', 'CANCELADA', name='occurrencestatus_enum', native_enum=False, length=20), nullable=False),
+    sa.Column('occurred_at', sa.DateTime(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=False),
+    sa.Column('created_by', sa.BigInteger(), nullable=True),
+    sa.Column('updated_by', sa.BigInteger(), nullable=True),
+    sa.Column('deleted_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['driver_id'], ['drivers.id'], ),
+    sa.ForeignKeyConstraint(['occurrence_type_id'], ['occurrence_types.id'], ),
+    sa.ForeignKeyConstraint(['operation_id'], ['operations.id'], ),
+    sa.ForeignKeyConstraint(['responsible_user_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['updated_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['vehicle_id'], ['vehicles.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_occurrences_tenant_id'), 'occurrences', ['tenant_id'], unique=False)
+    op.create_table('status_history',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('operation_id', sa.BigInteger(), nullable=False),
+    sa.Column('previous_status', sa.Enum('PROGRAMADO', 'AGUARDANDO', 'EM_FILA', 'EM_OPERACAO', 'CONCLUIDO', 'ATRASADO', 'CANCELADO', name='schedulestatus_enum', native_enum=False, length=20), nullable=True),
+    sa.Column('new_status', sa.Enum('PROGRAMADO', 'AGUARDANDO', 'EM_FILA', 'EM_OPERACAO', 'CONCLUIDO', 'ATRASADO', 'CANCELADO', name='schedulestatus_enum', native_enum=False, length=20), nullable=False),
+    sa.Column('changed_by', sa.BigInteger(), nullable=True),
+    sa.Column('changed_at', sa.DateTime(), nullable=False),
+    sa.Column('notes', sa.String(length=500), nullable=True),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=False),
+    sa.ForeignKeyConstraint(['changed_by'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['operation_id'], ['operations.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_status_history_operation_id'), 'status_history', ['operation_id'], unique=False)
+    op.create_index(op.f('ix_status_history_tenant_id'), 'status_history', ['tenant_id'], unique=False)
+    op.create_table('attachments',
+    sa.Column('id', sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), autoincrement=True, nullable=False),
+    sa.Column('occurrence_id', sa.BigInteger(), nullable=False),
+    sa.Column('file_name', sa.String(length=255), nullable=False),
+    sa.Column('file_path', sa.String(length=500), nullable=False),
+    sa.Column('content_type', sa.String(length=100), nullable=True),
+    sa.Column('size_bytes', sa.BigInteger(), nullable=True),
+    sa.Column('uploaded_by', sa.BigInteger(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('tenant_id', sa.BigInteger(), nullable=False),
+    sa.ForeignKeyConstraint(['occurrence_id'], ['occurrences.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['uploaded_by'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_attachments_occurrence_id'), 'attachments', ['occurrence_id'], unique=False)
+    op.create_index(op.f('ix_attachments_tenant_id'), 'attachments', ['tenant_id'], unique=False)
+    # ### end Alembic commands ###
+
+    # --- Seed do RBAC (seção 4): papéis fixos + matriz de permissões ---
+    roles_t = table("roles", column("id", sa.BigInteger), column("code", sa.String),
+                     column("name", sa.String), column("description", sa.String))
+    permissions_t = table("permissions", column("id", sa.BigInteger), column("code", sa.String),
+                           column("description", sa.String))
+    role_permissions_t = table("role_permissions", column("role_id", sa.BigInteger),
+                                column("permission_id", sa.BigInteger))
+
+    op.bulk_insert(
+        roles_t,
+        [{"id": rid, "code": code, "name": name, "description": None} for rid, code, name in _ROLES],
+    )
+    op.bulk_insert(
+        permissions_t,
+        [{"id": pid, "code": code, "description": desc} for pid, code, desc in _PERMISSIONS],
+    )
+
+    role_id_by_code = {code: rid for rid, code, _ in _ROLES}
+    permission_id_by_code = {code: pid for pid, code, _ in _PERMISSIONS}
+    role_permission_rows = [
+        {"role_id": role_id_by_code[role_code], "permission_id": permission_id_by_code[perm_code]}
+        for role_code, perm_codes in _ROLE_PERMISSION_CODES.items()
+        for perm_code in perm_codes
+    ]
+    op.bulk_insert(role_permissions_t, role_permission_rows)
+
+    # --- Seed do catálogo de planos (seção 7) ---
+    plans_t = table("plans", column("id", sa.BigInteger), column("code", sa.String),
+                     column("name", sa.String), column("max_users", sa.Integer),
+                     column("max_vehicles", sa.Integer), column("features", sa.JSON),
+                     column("is_active", sa.Boolean))
+    op.bulk_insert(
+        plans_t,
+        [
+            {
+                "id": pid, "code": code, "name": name,
+                "max_users": max_users, "max_vehicles": max_vehicles,
+                "features": features, "is_active": True,
+            }
+            for pid, code, name, max_users, max_vehicles, features in _PLANS
+        ],
+    )
+
+
+def downgrade() -> None:
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_index(op.f('ix_attachments_tenant_id'), table_name='attachments')
+    op.drop_index(op.f('ix_attachments_occurrence_id'), table_name='attachments')
+    op.drop_table('attachments')
+    op.drop_index(op.f('ix_status_history_tenant_id'), table_name='status_history')
+    op.drop_index(op.f('ix_status_history_operation_id'), table_name='status_history')
+    op.drop_table('status_history')
+    op.drop_index(op.f('ix_occurrences_tenant_id'), table_name='occurrences')
+    op.drop_table('occurrences')
+    op.drop_index(op.f('ix_operations_tenant_id'), table_name='operations')
+    op.drop_index(op.f('ix_operations_operation_number'), table_name='operations')
+    op.drop_table('operations')
+    op.drop_index(op.f('ix_schedule_items_tenant_id'), table_name='schedule_items')
+    op.drop_index(op.f('ix_schedule_items_schedule_id'), table_name='schedule_items')
+    op.drop_table('schedule_items')
+    op.drop_index(op.f('ix_vehicles_tenant_id'), table_name='vehicles')
+    op.drop_index(op.f('ix_vehicles_plate'), table_name='vehicles')
+    op.drop_table('vehicles')
+    op.drop_index(op.f('ix_drivers_tenant_id'), table_name='drivers')
+    op.drop_index(op.f('ix_drivers_cpf'), table_name='drivers')
+    op.drop_table('drivers')
+    op.drop_index(op.f('ix_user_roles_tenant_id'), table_name='user_roles')
+    op.drop_table('user_roles')
+    op.drop_index(op.f('ix_system_settings_tenant_id'), table_name='system_settings')
+    op.drop_table('system_settings')
+    op.drop_index(op.f('ix_schedules_tenant_id'), table_name='schedules')
+    op.drop_index(op.f('ix_schedules_schedule_date'), table_name='schedules')
+    op.drop_table('schedules')
+    op.drop_index(op.f('ix_routes_tenant_id'), table_name='routes')
+    op.drop_table('routes')
+    op.drop_index(op.f('ix_refresh_tokens_user_id'), table_name='refresh_tokens')
+    op.drop_table('refresh_tokens')
+    op.drop_index(op.f('ix_password_reset_tokens_user_id'), table_name='password_reset_tokens')
+    op.drop_table('password_reset_tokens')
+    op.drop_index(op.f('ix_notifications_user_id'), table_name='notifications')
+    op.drop_index(op.f('ix_notifications_tenant_id'), table_name='notifications')
+    op.drop_table('notifications')
+    op.drop_index(op.f('ix_carriers_tenant_id'), table_name='carriers')
+    op.drop_index(op.f('ix_carriers_cnpj'), table_name='carriers')
+    op.drop_table('carriers')
+    op.drop_index(op.f('ix_audit_logs_tenant_id'), table_name='audit_logs')
+    op.drop_table('audit_logs')
+    op.drop_index(op.f('ix_api_keys_tenant_id'), table_name='api_keys')
+    op.drop_table('api_keys')
+    op.drop_index(op.f('ix_vehicle_types_tenant_id'), table_name='vehicle_types')
+    op.drop_table('vehicle_types')
+    op.drop_index(op.f('ix_users_tenant_id'), table_name='users')
+    op.drop_index(op.f('ix_users_email'), table_name='users')
+    op.drop_table('users')
+    op.drop_index(op.f('ix_subscriptions_tenant_id'), table_name='subscriptions')
+    op.drop_table('subscriptions')
+    op.drop_table('role_permissions')
+    op.drop_index(op.f('ix_occurrence_types_tenant_id'), table_name='occurrence_types')
+    op.drop_table('occurrence_types')
+    op.drop_index(op.f('ix_locations_tenant_id'), table_name='locations')
+    op.drop_table('locations')
+    op.drop_index(op.f('ix_licenses_tenant_id'), table_name='licenses')
+    op.drop_table('licenses')
+    op.drop_index(op.f('ix_integration_configs_tenant_id'), table_name='integration_configs')
+    op.drop_table('integration_configs')
+    op.drop_table('tenants')
+    op.drop_table('roles')
+    op.drop_table('plans')
+    op.drop_table('permissions')
+    # ### end Alembic commands ###
