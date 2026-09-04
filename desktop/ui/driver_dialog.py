@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QComboBox, QDateEdit, QDialog, QDialogButtonBox, Q
 from services.api_client import ApiClient
 from services.async_task import ApiWorker
 from services.errors import ApiError
+from utils.masks import bind_live_format, format_cpf, format_phone
 
 _STATUS_OPTIONS = ["ATIVO", "INATIVO", "BLOQUEADO"]
 _CNH_CATEGORIES = ["", "A", "B", "AB", "C", "D", "E"]
@@ -45,6 +46,8 @@ class DriverDialog(QDialog):
 
         self._cpf_input = QLineEdit()
         self._cpf_input.setPlaceholderText("000.000.000-00")
+        self._cpf_input.setMaxLength(14)
+        bind_live_format(self._cpf_input, format_cpf)
         form.addRow("CPF *", self._cpf_input)
 
         self._cnh_number_input = QLineEdit()
@@ -62,6 +65,9 @@ class DriverDialog(QDialog):
         form.addRow("Validade CNH", self._cnh_expiry_input)
 
         self._phone_input = QLineEdit()
+        self._phone_input.setPlaceholderText("(00) 00000-0000")
+        self._phone_input.setMaxLength(16)
+        bind_live_format(self._phone_input, format_phone)
         form.addRow("Telefone", self._phone_input)
 
         self._carrier_combo = QComboBox()

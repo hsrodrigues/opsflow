@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QComboBox, QDialog, QDialogButtonBox, QFormLayout,
 from services.api_client import ApiClient
 from services.async_task import ApiWorker
 from services.errors import ApiError
+from utils.masks import bind_live_format, format_cnpj, format_phone
 
 _STATUS_OPTIONS = ["ATIVO", "INATIVO", "BLOQUEADO"]
 
@@ -45,12 +46,17 @@ class CarrierDialog(QDialog):
 
         self._cnpj_input = QLineEdit()
         self._cnpj_input.setPlaceholderText("00.000.000/0000-00")
+        self._cnpj_input.setMaxLength(18)
+        bind_live_format(self._cnpj_input, format_cnpj)
         form.addRow("CNPJ", self._cnpj_input)
 
         self._contact_name_input = QLineEdit()
         form.addRow("Contato", self._contact_name_input)
 
         self._phone_input = QLineEdit()
+        self._phone_input.setPlaceholderText("(00) 00000-0000")
+        self._phone_input.setMaxLength(16)
+        bind_live_format(self._phone_input, format_phone)
         form.addRow("Telefone", self._phone_input)
 
         self._email_input = QLineEdit()
