@@ -37,7 +37,13 @@ a = Analysis(  # noqa: F821 - Analysis/PYZ/EXE/COLLECT are injected by PyInstall
     [os.path.join(DESKTOP_DIR, "main.py")],
     pathex=[DESKTOP_DIR],
     binaries=[],
-    datas=[],
+    # `desktop/assets/opsflow.ico` -> extraído em `sys._MEIPASS/assets/
+    # opsflow.ico` no .exe empacotado — é o que `main.py::_icon_path()` usa
+    # pra definir o ícone da janela/barra de tarefas em runtime. `icon=`
+    # abaixo, em EXE(), só embute o ícone como RECURSO do arquivo .exe (o
+    # que o Explorer/atalho mostra) — não deixa o arquivo acessível pro
+    # código Python ler de volta, por isso os dois são necessários.
+    datas=[(os.path.join(DESKTOP_DIR, "assets", "opsflow.ico"), "assets")],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

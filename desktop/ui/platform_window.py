@@ -29,7 +29,7 @@ from ui.license_key_dialog import LicenseKeyDialog
 from ui.tenant_dialog import TenantDialog
 from ui.tenant_license_dialog import TenantLicenseDialog
 from ui.theme import apply_shadow, make_scroll_area_transparent
-from ui.widgets import build_badge
+from ui.widgets import build_badge, build_logo_mark
 from utils.formatting import format_datetime_br, format_file_size
 
 _LICENSE_STATUS_DISPLAY = {
@@ -230,14 +230,7 @@ class PlatformWindow(QWidget):
         layout = QHBoxLayout(topbar)
         layout.setContentsMargins(24, 0, 20, 0)
 
-        logo = QLabel("O", objectName="LoginLogoGlyph")
-        logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        logo_wrap = QWidget(objectName="LoginLogo")
-        logo_wrap.setFixedSize(30, 30)
-        logo_layout = QVBoxLayout(logo_wrap)
-        logo_layout.setContentsMargins(0, 0, 0, 0)
-        logo_layout.addWidget(logo)
-        layout.addWidget(logo_wrap)
+        layout.addWidget(build_logo_mark(30))
         layout.addSpacing(10)
         layout.addWidget(QLabel("OPSFLOW · PLATAFORMA", objectName="SidebarSection"))
         layout.addStretch(1)

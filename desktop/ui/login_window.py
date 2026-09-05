@@ -28,6 +28,7 @@ from services.async_task import ApiWorker
 from services.errors import ApiError
 from ui.activation_dialog import ActivationDialog
 from ui.theme import apply_shadow
+from ui.widgets import build_logo_mark
 
 _FEATURES = [
     ("🗓️", "Programação inteligente", "Turnos, rotas e veículos organizados em um só lugar."),
@@ -105,14 +106,7 @@ class LoginWindow(QWidget):
         layout.setContentsMargins(64, 56, 64, 48)
         layout.addStretch(1)
 
-        logo = QLabel("O", objectName="LoginLogoGlyph")
-        logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        logo_wrap = QWidget(objectName="LoginLogo")
-        logo_wrap.setFixedSize(48, 48)
-        logo_layout = QVBoxLayout(logo_wrap)
-        logo_layout.setContentsMargins(0, 0, 0, 0)
-        logo_layout.addWidget(logo)
-        layout.addWidget(logo_wrap)
+        layout.addWidget(build_logo_mark(48))
         layout.addSpacing(28)
 
         layout.addWidget(QLabel("GESTÃO OPERACIONAL INTELIGENTE", objectName="LoginBrandKicker"))

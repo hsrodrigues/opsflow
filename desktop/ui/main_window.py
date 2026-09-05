@@ -34,6 +34,7 @@ from ui.schedules_page import SchedulesPage
 from ui.settings_page import SettingsPage
 from ui.users_page import UsersPage
 from ui.vehicles_page import VehiclesPage
+from ui.widgets import build_logo_mark
 
 # Navegação agrupada por seção (padrão comum em ERPs: Visão Geral / Cadastros
 # / Operação / Sistema), cada item como (rótulo, habilitado, fábrica da
@@ -155,14 +156,7 @@ class MainWindow(QWidget):
 
         header = QHBoxLayout()
         header.setSpacing(10)
-        mark = QLabel("O", objectName="LoginLogoGlyph")
-        mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        mark_wrap = QWidget(objectName="LoginLogo")
-        mark_wrap.setFixedSize(30, 30)
-        mark_layout = QVBoxLayout(mark_wrap)
-        mark_layout.setContentsMargins(0, 0, 0, 0)
-        mark_layout.addWidget(mark)
-        header.addWidget(mark_wrap)
+        header.addWidget(build_logo_mark(30))
         brand_col = QVBoxLayout()
         brand_col.setSpacing(0)
         brand_col.addWidget(QLabel("OPSFLOW", objectName="SidebarBrand"))

@@ -1,8 +1,39 @@
 """Small reusable widget builders shared across list screens and dialogs."""
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QDialogButtonBox, QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
+from app.assets import icon_path
 from ui.theme import apply_shadow
+
+
+def build_logo_mark(size: int = 48) -> QWidget:
+    """A marca da OpsFlow — usada na tela de login e nas duas barras
+    superiores (MainWindow/PlatformWindow), sempre do mesmo jeito. Usa a
+    logo de verdade (`desktop/assets/opsflow.ico`, com transparência real
+    nos cantos — compõe limpo contra qualquer fundo) quando o arquivo
+    existe; cai pra um "O" desenhado em CSS (o visual original) só se o
+    arquivo faltar, pra nunca deixar uma tela sem marca nenhuma.
+    """
+    path = icon_path()
+    if path.is_file():
+        label = QLabel()
+        label.setFixedSize(size, size)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        pixmap = QPixmap(str(path)).scaled(
+            size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation,
+        )
+        label.setPixmap(pixmap)
+        return label
+
+    glyph = QLabel("O", objectName="LoginLogoGlyph")
+    glyph.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    wrap = QWidget(objectName="LoginLogo")
+    wrap.setFixedSize(size, size)
+    wrap_layout = QVBoxLayout(wrap)
+    wrap_layout.setContentsMargins(0, 0, 0, 0)
+    wrap_layout.addWidget(glyph)
+    return wrap
 
 
 def build_badge(text: str, badge_class: str) -> QWidget:

@@ -11,8 +11,10 @@ DESKTOP_DIR = Path(__file__).resolve().parent
 if str(DESKTOP_DIR) not in sys.path:
     sys.path.insert(0, str(DESKTOP_DIR))
 
+from PySide6.QtGui import QIcon  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
+from app.assets import icon_path  # noqa: E402
 from app.config import load_config  # noqa: E402
 from app.session import UserSession  # noqa: E402
 from services.api_client import ApiClient  # noqa: E402
@@ -84,6 +86,8 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("OpsFlow")
     app.setOrganizationName("OpsFlow")
+    if icon_path().is_file():
+        app.setWindowIcon(QIcon(str(icon_path())))
     controller = AppController(app)
     exit_code = app.exec()
     controller._api_client.close()
