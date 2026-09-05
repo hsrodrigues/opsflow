@@ -169,7 +169,7 @@ migrations normalmente.
 pytest                 # roda tests/backend com cobertura (ver pyproject.toml)
 ```
 
-130 testes automatizados (93% de cobertura de linha), sempre contra um
+139 testes automatizados (93% de cobertura de linha), sempre contra um
 SQLite isolado (nunca o banco de desenvolvimento) — cobrindo autenticação
 (incluindo o autoatendimento de perfil, `PATCH /auth/me`, liberado pra
 qualquer papel), isolamento multi-tenant com dados reais de duas empresas
@@ -189,10 +189,13 @@ APScheduler de verdade (evitaria uma suíte instável).
 
 ## 🔐 Segurança
 
-HTTPS, JWT com refresh rotativo, hash Argon2id, bloqueio após tentativas
-excessivas de login, isolamento por tenant, auditoria, segredos somente via
-variável de ambiente (nunca no código-fonte). Detalhes e o que ainda está
-pendente (hardening): Fase 11, documentado futuramente em `docs/SECURITY.md`.
+JWT com refresh rotativo, hash Argon2id, bloqueio após tentativas excessivas
+de login, isolamento por tenant, auditoria, segredos somente via variável de
+ambiente (nunca no código-fonte), rate limiting, cabeçalhos de segurança,
+`/docs` desligado fora de desenvolvimento. HTTPS é responsabilidade do
+proxy/load balancer na frente da API, não do código em si. Detalhes
+completos, item a item, com o arquivo/teste que garante cada um:
+[docs/SECURITY.md](docs/SECURITY.md).
 
 ## 🗺️ Roadmap
 
@@ -212,9 +215,9 @@ pendente (hardening): Fase 11, documentado futuramente em `docs/SECURITY.md`.
 | — | Backup/restore do banco (robô diário + sob demanda, pelo Console de Plataforma) *(adiantado da seção 41)* | ✅ Concluída |
 | 8 | Desktop (PySide6) | ✅ Concluída — login, shell, todos os cadastros, operações, dashboard, relatórios, usuários, configurações, licença e console de plataforma |
 | — | Stored procedures (duplicar programação, fechar pendências, arquivar dados antigos) *(fora do escopo original, pedido explícito)* | ✅ Concluída |
-| 9 | Testes (cobertura ampla, isolamento multi-tenant) | ✅ Concluída — 130 testes, 93% de cobertura de linha |
+| 9 | Testes (cobertura ampla, isolamento multi-tenant) | ✅ Concluída — 139 testes, 93% de cobertura de linha |
 | 10 | Build e instalador | ✅ Concluída — PyInstaller (one-folder) + instalador Inno Setup, testado com instalação/execução/desinstalação silenciosa reais |
-| 11 | Hardening de segurança | Planejada |
+| 11 | Hardening de segurança | ✅ Concluída — rate limiting de verdade, docs desligados fora de dev, cabeçalhos de segurança, CORS sem a combinação inválida wildcard+credentials, `/api/health` sem vazar credencial — ver [SECURITY.md](docs/SECURITY.md) |
 | 12 | Documentação final | 🔶 Em andamento |
 
 Visão de mais longo prazo (mapas/GPS, integrações, IA, mobile):
