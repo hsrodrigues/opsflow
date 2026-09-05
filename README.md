@@ -197,6 +197,7 @@ proxy/load balancer na frente da API, não do código em si. Detalhes
 completos, item a item, com o arquivo/teste que garante cada um:
 [docs/SECURITY.md](docs/SECURITY.md).
 
+<a id="roadmap"></a>
 ## 🗺️ Roadmap
 
 | Fase | Conteúdo | Status |
