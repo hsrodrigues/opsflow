@@ -54,6 +54,16 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     cors_allow_origins: list[str] = ["*"]
     rate_limit_per_minute: int = 120
+    # Desligado só pelos testes automatizados (`conftest.py`) — 100+
+    # requests numa suíte de verdade bateria no limite e derrubaria testes
+    # que não têm nada a ver com rate limiting.
+    rate_limiting_enabled: bool = True
+    # Host(s) que a API aceita servir — `["*"]` (default) não restringe
+    # nada; numa API atrás de um domínio público fixo, liste-o aqui pra
+    # mitigar ataques de Host header (cache poisoning, links de reset de
+    # senha forjados com outro host, etc. — nenhum destes é explorável hoje
+    # nesta aplicação especificamente, mas é a mitigação padrão).
+    allowed_hosts: list[str] = ["*"]
 
     # --- License server ---
     license_server_url: str | None = None
@@ -91,6 +101,26 @@ class Settings(BaseSettings):
     # Em Docker/Linux, deixe em branco — os binários já estão no PATH do
     # container.
     mysql_bin_dir: str | None = None
+
+    @property
+    def cors_allow_credentials(self) -> bool:
+        """`allow_credentials=True` combinado com `allow_origins=["*"]` é
+        uma combinação que o próprio spec de CORS considera inválida (a
+        maioria dos navegadores recusa/ignora credenciais nesse caso de
+        qualquer forma) — só liga quando a lista de origens já foi
+        restringida a domínios específicos."""
+        return self.cors_allow_origins != ["*"]
+
+    @property
+    def docs_enabled(self) -> bool:
+        """`/docs`/`/redoc`/`/openapi.json` publicam o contrato inteiro da
+        API (todo endpoint, todo schema) sem exigir autenticação — sem
+        problema em desenvolvimento, um vazamento de informação
+        desnecessário numa API real na internet. `@property` (não um campo
+        de env var) de propósito: nunca configurável por engano, sempre
+        derivado de `app_env`.
+        """
+        return self.app_env != "production"
 
 
 @lru_cache
