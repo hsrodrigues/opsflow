@@ -64,3 +64,39 @@ def test_update_route_status_and_soft_delete(auth_client):
 def test_route_endpoints_require_authentication(client):
     response = client.get("/api/v1/routes")
     assert response.status_code == 401
+
+
+def test_route_coordinates_are_optional_and_feed_the_panel_map(auth_client):
+    """Lat/long não afetam nada do resto do sistema — existem só pra alimentar
+    o mapa do Painel de TV (`panel_service.get_board`)."""
+    client, headers, _tenant = auth_client
+
+    without_coords = client.post(
+        "/api/v1/routes", headers=headers,
+        json={"name": "Rota sem coordenadas", "origin_name": "Origem A", "destination_name": "Destino A"},
+    )
+    assert without_coords.status_code == 201
+    body = without_coords.json()
+    assert body["origin_latitude"] is None
+    assert body["destination_latitude"] is None
+
+    with_coords = client.post(
+        "/api/v1/routes", headers=headers,
+        json={
+            "name": "Rota com coordenadas", "origin_name": "Origem B", "destination_name": "Destino B",
+            "origin_latitude": -23.55, "origin_longitude": -46.63,
+            "destination_latitude": -22.90, "destination_longitude": -43.20,
+        },
+    )
+    assert with_coords.status_code == 201
+    body = with_coords.json()
+    assert body["origin_latitude"] == -23.55
+    assert body["destination_longitude"] == -43.20
+
+    route_id = with_coords.json()["id"]
+    updated = client.patch(
+        f"/api/v1/routes/{route_id}", headers=headers, json={"origin_latitude": -23.0, "origin_longitude": -47.0},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["origin_latitude"] == -23.0
+    assert updated.json()["destination_latitude"] == -22.90  # não mexeu no que não foi enviado

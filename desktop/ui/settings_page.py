@@ -7,7 +7,19 @@ nesse produto, e a decisão foi não criar um — trocar a própria senha (ou a
 de qualquer outro usuário) é sempre uma ação do admin da empresa, editando o
 usuário na tela Usuários.
 """
-from PySide6.QtWidgets import QFrame, QFormLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import (
+    QApplication,
+    QFrame,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from app.config import DesktopConfig
 from app.session import UserSession
@@ -29,6 +41,28 @@ def _repolish(widget: QWidget) -> None:
     widget.style().polish(widget)
 
 
+def _build_profile_row(label_text: str, field: QWidget) -> QWidget:
+    """Uma linha "rótulo à esquerda + campo à direita" — feita à mão, uma
+    por linha, em vez de um único `QFormLayout.addRow(...)` pra cada campo.
+    Ver `SettingsPage.showEvent`/`_force_relayout` pro motivo real: esta
+    página some numa `QStackedWidget` sem nenhum evento de tela entre ser
+    construída e virar a atual, e sem forçar um resize de verdade da janela
+    depois disso, um bloco de linhas aninhado (`QFormLayout` OU uma
+    `QVBoxLayout` extra agrupando estas linhas — ambos testados) sai com
+    geometria errada na primeira pintura. Este jeito mais raso (cada linha
+    direto no layout do card, sem uma camada extra de agrupamento) reduz o
+    quanto isso aparece, mas quem realmente resolve é o resize forçado."""
+    row = QWidget()
+    row_layout = QHBoxLayout(row)
+    row_layout.setContentsMargins(0, 0, 0, 0)
+    row_layout.setSpacing(12)
+    label = QLabel(label_text)
+    label.setFixedWidth(140)
+    row_layout.addWidget(label)
+    row_layout.addWidget(field, stretch=1)
+    return row
+
+
 class SettingsPage(QWidget):
     def __init__(self, config: DesktopConfig, api_client: ApiClient, session: UserSession) -> None:
         super().__init__()
@@ -40,6 +74,28 @@ class SettingsPage(QWidget):
         self._build_ui()
         self._load_current_values()
         self._load_connection_status()
+        if self._panel_card is not None:
+            self._load_panel_token()
+
+    def showEvent(self, event) -> None:  # noqa: N802 - nome do Qt
+        """A primeira vez que esta página vira a atual do `QStackedWidget`
+        (a troca acontece no mesmo evento que a constrói — `MainWindow.
+        _navigate_to` faz `factory(self)` seguido de `setCurrentIndex` sem
+        nenhum evento de tela no meio), os cartões desta página saem com
+        linhas sobrepostas/cortadas: só um resize de verdade da JANELA DE
+        TOPO (não desta página — a geometria dela é gerenciada pelo
+        `QStackedWidget`, que sobrescreve `self.resize()` de volta na hora)
+        faz o Qt recalcular a geometria direito. Bug real, reproduzido de
+        forma 100% determinística (não é frescura de timing) — sem isto o
+        usuário via a mensagem "tudo colado" reportada nesta mesma tela."""
+        super().showEvent(event)
+        QTimer.singleShot(0, self._force_relayout)
+
+    def _force_relayout(self) -> None:
+        top = self.window()
+        size = top.size()
+        top.resize(size.width() + 1, size.height())
+        top.resize(size)
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -56,6 +112,11 @@ class SettingsPage(QWidget):
 
         # --- cartão "Meu perfil" ---
         profile_card = QFrame(objectName="Card")
+        # Largura máxima: sem isto o card estica até a borda da janela (que é
+        # bem larga nas outras telas, cheias de tabela) e o botão abaixo vira
+        # uma barra enorme de ponta a ponta. Um formulário de perfil lê
+        # melhor numa coluna estreita, como em qualquer tela de conta.
+        profile_card.setMaximumWidth(640)
         apply_shadow(profile_card, blur=20, y_offset=6, alpha=16)
         profile_layout = QVBoxLayout(profile_card)
         profile_layout.setContentsMargins(20, 18, 20, 18)
@@ -69,35 +130,36 @@ class SettingsPage(QWidget):
         )
         profile_layout.addLayout(header_row)
 
-        form = QFormLayout()
-        form.setSpacing(10)
-
+        # Cada linha vai direto no `profile_layout` (sem uma `rows_layout`
+        # intermediária) — um nível a menos de aninhamento entre o card e o
+        # campo de verdade, o suficiente pra deixar de precisar de um
+        # segundo resize pra convergir a largura na primeira exibição.
         self._email_value = QLabel("—", objectName="Muted")
-        form.addRow("E-mail", self._email_value)
-        form.addRow("Papel", self._build_role_badge_holder())
+        profile_layout.addWidget(_build_profile_row("E-mail", self._email_value))
+        profile_layout.addWidget(_build_profile_row("Papel", self._build_role_badge_holder()))
 
         self._full_name_input = QLineEdit()
         self._full_name_input.setPlaceholderText("Seu nome completo")
-        form.addRow("Nome completo *", self._full_name_input)
+        profile_layout.addWidget(_build_profile_row("Nome completo *", self._full_name_input))
 
         self._phone_input = QLineEdit()
         self._phone_input.setPlaceholderText("(00) 00000-0000")
         self._phone_input.setMaxLength(15)
         bind_live_format(self._phone_input, format_phone)
-        form.addRow("Telefone", self._phone_input)
+        profile_layout.addWidget(_build_profile_row("Telefone", self._phone_input))
 
-        profile_layout.addLayout(form)
-
-        save_row = QVBoxLayout()
+        save_row = QHBoxLayout()
         self._save_button = QPushButton("Salvar alterações", objectName="PrimaryButton")
         self._save_button.clicked.connect(self._handle_save_clicked)
         save_row.addWidget(self._save_button)
+        save_row.addStretch(1)
         profile_layout.addLayout(save_row)
 
         layout.addWidget(profile_card)
 
         # --- cartão "Senha" — sem campo de senha nenhum, de propósito ---
         password_card = QFrame(objectName="Card")
+        password_card.setMaximumWidth(640)  # antes do conteúdo — ver comentário no profile_card
         apply_shadow(password_card, blur=20, y_offset=6, alpha=16)
         password_layout = QVBoxLayout(password_card)
         password_layout.setContentsMargins(20, 18, 20, 18)
@@ -114,8 +176,56 @@ class SettingsPage(QWidget):
         password_layout.addWidget(note)
         layout.addWidget(password_card)
 
+        # --- cartão "Painel de operações (TV)" — só pra quem administra a
+        # empresa; ideia do usuário: uma tela pública somente-leitura pra
+        # deixar numa TV do centro de operações, mostrando de onde pra onde
+        # cada carga vai e o status ao vivo, sem depender de rastreador. ---
+        self._panel_card: QFrame | None = None
+        if "ADMIN_EMPRESA" in self._session.roles:
+            panel_card = QFrame(objectName="Card")
+            panel_card.setMaximumWidth(640)  # antes do conteúdo — ver comentário no profile_card
+            apply_shadow(panel_card, blur=20, y_offset=6, alpha=16)
+            panel_layout = QVBoxLayout(panel_card)
+            panel_layout.setContentsMargins(20, 18, 20, 18)
+            panel_layout.setSpacing(10)
+            panel_layout.addWidget(QLabel("Painel de operações (TV)", objectName="SectionTitle"))
+            panel_subtitle = QLabel(
+                "Um link somente-leitura para deixar aberto numa TV do centro de operações — "
+                "mostra o mapa e o status de cada carga em tempo real, sem precisar fazer login.",
+                objectName="Muted",
+            )
+            panel_subtitle.setWordWrap(True)
+            panel_layout.addWidget(panel_subtitle)
+
+            link_row = QHBoxLayout()
+            self._panel_link_input = QLineEdit()
+            self._panel_link_input.setReadOnly(True)
+            self._panel_link_input.setPlaceholderText("Gerando link...")
+            link_row.addWidget(self._panel_link_input, stretch=1)
+            copy_button = QPushButton("Copiar link", objectName="SecondaryButton")
+            copy_button.clicked.connect(self._handle_copy_panel_link)
+            link_row.addWidget(copy_button)
+            panel_layout.addLayout(link_row)
+
+            regenerate_row = QHBoxLayout()
+            regenerate_button = QPushButton("Gerar novo link", objectName="SecondaryButton")
+            regenerate_button.clicked.connect(self._handle_regenerate_panel_link)
+            regenerate_row.addWidget(regenerate_button)
+            regenerate_row.addStretch(1)
+            panel_layout.addLayout(regenerate_row)
+            panel_hint = QLabel(
+                "Gerar um novo link desativa o anterior — quem tiver o link antigo aberto na TV "
+                "para de ver atualizações.", objectName="Faint",
+            )
+            panel_hint.setWordWrap(True)
+            panel_layout.addWidget(panel_hint)
+
+            layout.addWidget(panel_card)
+            self._panel_card = panel_card
+
         # --- cartão "Sobre" ---
         about_card = QFrame(objectName="Card")
+        about_card.setMaximumWidth(640)  # antes do conteúdo — ver comentário no profile_card
         apply_shadow(about_card, blur=20, y_offset=6, alpha=16)
         about_layout = QFormLayout(about_card)
         about_layout.setContentsMargins(20, 18, 20, 18)
@@ -178,6 +288,43 @@ class SettingsPage(QWidget):
                 item.widget().deleteLater()
         self._connection_status_slot.addWidget(build_badge(text, badge_class))
 
+    def _load_panel_token(self) -> None:
+        self._panel_worker = ApiWorker(self._api_client.get_panel_token, self._session.access_token)
+        self._panel_worker.succeeded.connect(self._handle_panel_token_loaded)
+        self._panel_worker.failed.connect(lambda _exc: self._panel_link_input.setPlaceholderText("Indisponível"))
+        self._panel_worker.start()
+
+    def _handle_panel_token_loaded(self, result: dict) -> None:
+        full_url = self._config.api_base_url.rstrip("/") + result["board_path"]
+        self._panel_link_input.setText(full_url)
+
+    def _handle_copy_panel_link(self) -> None:
+        link = self._panel_link_input.text().strip()
+        if not link:
+            return
+        QApplication.clipboard().setText(link)
+        self._show_status("Link do painel copiado.")
+
+    def _handle_regenerate_panel_link(self) -> None:
+        confirm = QMessageBox.question(
+            self, "Gerar novo link do painel",
+            "O link atual do painel de TV vai parar de funcionar imediatamente. "
+            "Qualquer tela que já esteja usando o link antigo vai precisar do novo. Continuar?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        self._regenerate_worker = ApiWorker(self._api_client.regenerate_panel_token, self._session.access_token)
+        self._regenerate_worker.succeeded.connect(self._handle_panel_regenerated)
+        self._regenerate_worker.failed.connect(
+            lambda _exc: self._show_status("Não foi possível gerar um novo link.", is_error=True)
+        )
+        self._regenerate_worker.start()
+
+    def _handle_panel_regenerated(self, result: dict) -> None:
+        self._handle_panel_token_loaded(result)
+        self._show_status("Novo link do painel gerado.")
+
     def _handle_save_clicked(self) -> None:
         full_name = self._full_name_input.text().strip()
         if not full_name:
@@ -207,3 +354,5 @@ class SettingsPage(QWidget):
         _repolish(self._status_message)
         self._status_message.setText(message)
         self._status_message.show()
+        if not is_error:
+            QTimer.singleShot(4000, self._status_message.hide)

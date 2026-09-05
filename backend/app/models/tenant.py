@@ -23,6 +23,11 @@ class Tenant(Base, TimestampMixin):
     trade_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     cnpj: Mapped[str | None] = mapped_column(String(18), unique=True, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Token opaco do painel de TV somente-leitura (seção "painel de
+    # operações") — gerado sob demanda, nunca escolhido pelo cliente; `None`
+    # até a empresa gerar seu primeiro link. Ver a migration que o introduz
+    # para o raciocínio completo de por que não é uma sessão JWT normal.
+    panel_token: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
 
     subscriptions: Mapped[list["Subscription"]] = relationship(back_populates="tenant")
     licenses: Mapped[list["License"]] = relationship(back_populates="tenant")

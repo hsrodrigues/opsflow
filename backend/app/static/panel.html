@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OpsFlow — Painel de Operações</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<style>
+  :root {
+    --bg: #0a0e1a; --surface: #11162a; --surface-alt: #171d38; --border: #232b4a;
+    --text: #eef0fb; --text-muted: #8b93b8; --text-faint: #5b6389;
+    --accent-1: #6366f1; --accent-2: #a855f7;
+    --success: #22c55e; --success-wash: rgba(34,197,94,.14);
+    --warning: #f59e0b; --warning-wash: rgba(245,158,11,.14);
+    --danger: #f43f5e; --danger-wash: rgba(244,63,94,.14);
+    --info: #818cf8; --info-wash: rgba(129,140,248,.14);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: radial-gradient(circle at 12% 0%, #171d3d 0%, var(--bg) 55%);
+    color: var(--text); font-family: "Segoe UI", Inter, system-ui, sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .topbar {
+    display: flex; align-items: center; gap: 14px; padding: 16px 28px;
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .logo {
+    width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 18px; color: #fff;
+    box-shadow: 0 6px 18px rgba(99,102,241,.4);
+  }
+  .brand-name { font-size: 18px; font-weight: 800; letter-spacing: .2px; }
+  .brand-sub { font-size: 12.5px; color: var(--text-muted); }
+  .topbar-spacer { flex: 1; }
+  .clock { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: .5px; }
+  .updated { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
+  .pulse-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--success);
+    box-shadow: 0 0 0 0 rgba(34,197,94,.6); animation: pulse 1.8s infinite;
+  }
+  .pulse-dot.stale { background: var(--danger); animation: none; }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(34,197,94,.55); }
+    70% { box-shadow: 0 0 0 8px rgba(34,197,94,0); }
+    100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+  }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; padding: 16px 28px 0 28px; flex-shrink: 0; }
+  .kpi-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    padding: 14px 18px; position: relative; overflow: hidden;
+  }
+  .kpi-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+  .kpi-card.info::before { background: var(--info); }
+  .kpi-card.neutral::before { background: var(--text-faint); }
+  .kpi-card.danger::before { background: var(--danger); }
+  .kpi-card.success::before { background: var(--success); }
+  .kpi-value { font-size: 32px; font-weight: 800; line-height: 1.1; }
+  .kpi-label { font-size: 12px; color: var(--text-muted); font-weight: 600; letter-spacing: .3px; margin-top: 4px; }
+
+  .main {
+    flex: 1; display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px;
+    padding: 16px 28px 20px 28px; min-height: 0;
+  }
+  @media (max-width: 1100px) { .main { grid-template-columns: 1fr; } }
+
+  .panel-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
+    display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+  }
+  .panel-card-header { padding: 14px 18px; border-bottom: 1px solid var(--border); font-weight: 700; font-size: 14px; }
+  #map { flex: 1; min-height: 0; background: #0d1226; }
+  .map-empty {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: var(--text-faint); font-size: 13px; text-align: center; padding: 0 24px; pointer-events: none;
+  }
+
+  .ops-list { flex: 1; overflow-y: auto; padding: 8px 12px; }
+  .op-row {
+    display: flex; align-items: center; gap: 12px; padding: 12px 10px; border-radius: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .op-row:last-child { border-bottom: none; }
+  .op-route { flex: 1; min-width: 0; }
+  .op-route-name { font-weight: 700; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .op-meta { font-size: 11.5px; color: var(--text-muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .op-time { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; width: 54px; flex-shrink: 0; text-align: right; }
+  .badge {
+    flex-shrink: 0; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; letter-spacing: .2px;
+  }
+  .badge.info { background: var(--info-wash); color: var(--info); }
+  .badge.neutral { background: rgba(139,147,184,.14); color: var(--text-muted); }
+  .badge.danger { background: var(--danger-wash); color: var(--danger); }
+  .badge.success { background: var(--success-wash); color: var(--success); }
+
+  .empty-state { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-faint); font-size: 13.5px; padding: 24px; text-align: center; }
+
+  #fatal {
+    /* z-index alto de propósito: os painos internos do Leaflet (dentro de
+       #map) chegam a usar z-index 700 nas próprias regras dele — sem isto
+       o mapa (que fica com a última posição/zoom antes do erro) vaza por
+       cima deste aviso em vez de ficar escondido atrás. */
+    position: fixed; inset: 0; z-index: 9999; display: none; flex-direction: column;
+    align-items: center; justify-content: center; gap: 10px; background: var(--bg);
+    text-align: center; padding: 24px;
+  }
+  #fatal h1 { font-size: 20px; margin: 0; }
+  #fatal p { color: var(--text-muted); margin: 0; max-width: 420px; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="logo">O</div>
+    <div>
+      <div class="brand-name" id="tenant-name">OpsFlow</div>
+      <div class="brand-sub">Painel de operações</div>
+    </div>
+    <div class="topbar-spacer"></div>
+    <div style="text-align:right;">
+      <div class="clock" id="clock">--:--:--</div>
+      <div class="updated"><span class="pulse-dot" id="pulse-dot"></span><span id="updated-text">conectando…</span></div>
+    </div>
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi-card info"><div class="kpi-value" id="kpi-em-operacao">—</div><div class="kpi-label">EM OPERAÇÃO</div></div>
+    <div class="kpi-card neutral"><div class="kpi-value" id="kpi-aguardando">—</div><div class="kpi-label">AGUARDANDO</div></div>
+    <div class="kpi-card danger"><div class="kpi-value" id="kpi-atrasado">—</div><div class="kpi-label">ATRASADO</div></div>
+    <div class="kpi-card success"><div class="kpi-value" id="kpi-concluido">—</div><div class="kpi-label">CONCLUÍDOS HOJE</div></div>
+  </div>
+
+  <div class="main">
+    <div class="panel-card" style="position:relative;">
+      <div class="panel-card-header">Mapa das rotas de hoje</div>
+      <div id="map"></div>
+      <div class="map-empty" id="map-empty" hidden>Nenhuma rota de hoje tem coordenadas cadastradas ainda.<br/>Cadastre lat/long ao criar a rota para elas aparecerem aqui.</div>
+    </div>
+    <div class="panel-card">
+      <div class="panel-card-header">Cargas em andamento hoje</div>
+      <div class="ops-list" id="ops-list"><div class="empty-state">Carregando…</div></div>
+    </div>
+  </div>
+
+  <div id="fatal">
+    <h1>Painel indisponível</h1>
+    <p id="fatal-message">Não foi possível carregar este painel. Verifique o link com o administrador da sua empresa.</p>
+  </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+  const TOKEN = window.location.pathname.split("/").filter(Boolean).pop();
+  const REFRESH_MS = 20000;
+
+  const STATUS_LABEL = {
+    PROGRAMADO: "Programado", AGUARDANDO: "Aguardando", EM_FILA: "Em fila",
+    EM_OPERACAO: "Em operação", CONCLUIDO: "Concluído", ATRASADO: "Atrasado", CANCELADO: "Cancelado",
+  };
+  const STATUS_CLASS = {
+    PROGRAMADO: "neutral", AGUARDANDO: "neutral", EM_FILA: "neutral",
+    EM_OPERACAO: "info", CONCLUIDO: "success", ATRASADO: "danger", CANCELADO: "neutral",
+  };
+  const ROUTE_COLOR = { EM_OPERACAO: "#818cf8", ATRASADO: "#f43f5e", CONCLUIDO: "#22c55e" };
+
+  function fmtTime(iso) {
+    if (!iso) return "--:--";
+    const d = new Date(iso.endsWith("Z") ? iso : iso + "Z");
+    return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function tickClock() {
+    document.getElementById("clock").textContent = new Date().toLocaleTimeString("pt-BR");
+  }
+  setInterval(tickClock, 1000);
+  tickClock();
+
+  const map = L.map("map", { zoomControl: false, attributionControl: false }).setView([-14.2, -51.9], 4);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);
+  let mapLayer = L.layerGroup().addTo(map);
+
+  function renderMap(operations) {
+    mapLayer.clearLayers();
+    const points = [];
+    operations.forEach((op) => {
+      const o = op.origin, d = op.destination;
+      const hasOrigin = o.latitude != null && o.longitude != null;
+      const hasDest = d.latitude != null && d.longitude != null;
+      const color = ROUTE_COLOR[op.status] || "#5b6389";
+      if (hasOrigin) {
+        L.circleMarker([o.latitude, o.longitude], { radius: 6, color, fillColor: color, fillOpacity: .9, weight: 2 })
+          .bindTooltip(o.name).addTo(mapLayer);
+        points.push([o.latitude, o.longitude]);
+      }
+      if (hasDest) {
+        L.circleMarker([d.latitude, d.longitude], { radius: 6, color, fillColor: "#0a0e1a", fillOpacity: .9, weight: 2 })
+          .bindTooltip(d.name).addTo(mapLayer);
+        points.push([d.latitude, d.longitude]);
+      }
+      if (hasOrigin && hasDest) {
+        L.polyline([[o.latitude, o.longitude], [d.latitude, d.longitude]], { color, weight: 2.5, opacity: .8, dashArray: op.status === "CONCLUIDO" ? null : "6 6" })
+          .addTo(mapLayer);
+      }
+    });
+    document.getElementById("map-empty").hidden = points.length > 0;
+    if (points.length > 0) map.fitBounds(points, { padding: [36, 36], maxZoom: 12 });
+  }
+
+  function renderList(operations) {
+    const list = document.getElementById("ops-list");
+    if (operations.length === 0) {
+      list.innerHTML = '<div class="empty-state">Nenhuma carga programada para hoje.</div>';
+      return;
+    }
+    list.innerHTML = operations.map((op) => {
+      const metaParts = [op.carrier_name, op.vehicle_plate, op.driver_name].filter(Boolean);
+      const cls = STATUS_CLASS[op.status] || "neutral";
+      const label = STATUS_LABEL[op.status] || op.status;
+      const time = fmtTime(op.started_at || op.scheduled_at);
+      return `<div class="op-row">
+        <div class="op-time">${time}</div>
+        <div class="op-route">
+          <div class="op-route-name">${op.route_name}</div>
+          <div class="op-meta">${metaParts.join(" · ") || "—"}</div>
+        </div>
+        <span class="badge ${cls}">${label}</span>
+      </div>`;
+    }).join("");
+  }
+
+  function markStale(isStale) {
+    document.getElementById("pulse-dot").classList.toggle("stale", isStale);
+  }
+
+  async function refresh() {
+    try {
+      const res = await fetch(`/api/v1/panel/${TOKEN}/board`, { cache: "no-store" });
+      if (res.status === 404) {
+        document.getElementById("fatal-message").textContent =
+          "Este link de painel não existe mais — peça um novo link ao administrador da sua empresa.";
+        document.getElementById("fatal").style.display = "flex";
+        return;
+      }
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+
+      document.getElementById("tenant-name").textContent = data.tenant_name;
+      document.getElementById("kpi-em-operacao").textContent = data.summary.em_operacao;
+      document.getElementById("kpi-aguardando").textContent = data.summary.aguardando;
+      document.getElementById("kpi-atrasado").textContent = data.summary.atrasado;
+      document.getElementById("kpi-concluido").textContent = data.summary.concluido_hoje;
+      renderList(data.operations);
+      renderMap(data.operations);
+      document.getElementById("updated-text").textContent = "atualizado às " + new Date().toLocaleTimeString("pt-BR");
+      markStale(false);
+    } catch (err) {
+      document.getElementById("updated-text").textContent = "sem conexão — tentando de novo…";
+      markStale(true);
+    }
+  }
+
+  refresh();
+  setInterval(refresh, REFRESH_MS);
+</script>
+</body>
+</html>

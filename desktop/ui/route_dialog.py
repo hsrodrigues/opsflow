@@ -19,6 +19,22 @@ from ui.widgets import build_dialog_buttons, build_dialog_header
 _STATUS_OPTIONS = ["ATIVA", "INATIVA"]
 _OPERATION_TYPES = ["", "ENTREGA", "COLETA", "TRANSFERENCIA"]
 
+# Sentinela "não informado": um pouco abaixo do mínimo geográfico real
+# (-90/-180), com `setSpecialValueText` mostrando um traço em vez do número
+# nesse valor — assim dá pra distinguir "usuário não preencheu" de "0.0"
+# (que é uma coordenada real, o cruzamento do equador com Greenwich) sem
+# precisar de um checkbox "tem coordenada?" a mais no formulário.
+_LAT_UNSET, _LNG_UNSET = -91.0, -181.0
+
+
+def _coord_spinbox(minimum: float, maximum: float) -> QDoubleSpinBox:
+    spin = QDoubleSpinBox()
+    spin.setRange(minimum, maximum)
+    spin.setDecimals(6)
+    spin.setSpecialValueText("— (opcional)")
+    spin.setValue(minimum)
+    return spin
+
 
 class RouteDialog(QDialog):
     """Modal form to create a new route or edit an existing one."""
@@ -68,6 +84,22 @@ class RouteDialog(QDialog):
         self._destination_input = QLineEdit()
         form.addRow("Destino *", self._destination_input)
 
+        # Opcionais — só existem para desenhar a rota no mapa do Painel de
+        # operações (TV); nada mais no sistema depende delas.
+        origin_coords_row = QHBoxLayout()
+        self._origin_lat_input = _coord_spinbox(_LAT_UNSET, 90)
+        self._origin_lng_input = _coord_spinbox(_LNG_UNSET, 180)
+        origin_coords_row.addWidget(self._origin_lat_input)
+        origin_coords_row.addWidget(self._origin_lng_input)
+        form.addRow("Coord. origem (lat/long)", origin_coords_row)
+
+        destination_coords_row = QHBoxLayout()
+        self._destination_lat_input = _coord_spinbox(_LAT_UNSET, 90)
+        self._destination_lng_input = _coord_spinbox(_LNG_UNSET, 180)
+        destination_coords_row.addWidget(self._destination_lat_input)
+        destination_coords_row.addWidget(self._destination_lng_input)
+        form.addRow("Coord. destino (lat/long)", destination_coords_row)
+
         self._distance_input = QDoubleSpinBox()
         self._distance_input.setRange(0, 100_000)
         self._distance_input.setDecimals(1)
@@ -111,6 +143,12 @@ class RouteDialog(QDialog):
         self._name_input.setText(route["name"])
         self._origin_input.setText(route["origin_name"])
         self._destination_input.setText(route["destination_name"])
+        if route.get("origin_latitude") is not None:
+            self._origin_lat_input.setValue(route["origin_latitude"])
+            self._origin_lng_input.setValue(route["origin_longitude"])
+        if route.get("destination_latitude") is not None:
+            self._destination_lat_input.setValue(route["destination_latitude"])
+            self._destination_lng_input.setValue(route["destination_longitude"])
         self._distance_input.setValue(route.get("distance_km") or 0)
         hours, minutes = divmod(route.get("estimated_time_minutes") or 0, 60)
         self._time_hours_input.setValue(hours)
@@ -132,10 +170,18 @@ class RouteDialog(QDialog):
             return
 
         total_minutes = self._time_hours_input.value() * 60 + self._time_minutes_input.value()
+        origin_lat = self._origin_lat_input.value()
+        origin_lng = self._origin_lng_input.value()
+        destination_lat = self._destination_lat_input.value()
+        destination_lng = self._destination_lng_input.value()
         payload = {
             "name": name,
             "origin_name": origin,
             "destination_name": destination,
+            "origin_latitude": origin_lat if origin_lat > _LAT_UNSET else None,
+            "origin_longitude": origin_lng if origin_lng > _LNG_UNSET else None,
+            "destination_latitude": destination_lat if destination_lat > _LAT_UNSET else None,
+            "destination_longitude": destination_lng if destination_lng > _LNG_UNSET else None,
             "distance_km": self._distance_input.value() or None,
             "estimated_time_minutes": total_minutes or None,
             "operation_type": self._operation_type_combo.currentText() or None,

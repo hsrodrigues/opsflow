@@ -277,6 +277,14 @@ class ApiClient:
     def mark_all_notifications_read(self, access_token: str) -> dict:
         return self._request("POST", "/api/v1/notifications/read-all", access_token=access_token)
 
+    # --- Painel de operações / TV (link somente-leitura, sem login) ---
+
+    def get_panel_token(self, access_token: str) -> dict:
+        return self._request("GET", "/api/v1/panel/token", access_token=access_token)
+
+    def regenerate_panel_token(self, access_token: str) -> dict:
+        return self._request("POST", "/api/v1/panel/token/regenerate", access_token=access_token)
+
     # --- Relatórios (seção 17) ---
 
     def preview_report(self, access_token: str, report_type: str, **params) -> dict:

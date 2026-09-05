@@ -19,13 +19,24 @@ class LocationRepository(TenantRepository[Location]):
     def get_by_name(self, name: str) -> Location | None:
         return self.db.execute(self._base_query().where(Location.name == name)).scalar_one_or_none()
 
-    def get_or_create(self, name: str) -> Location:
+    def get_or_create(
+        self, name: str, *, latitude: float | None = None, longitude: float | None = None,
+    ) -> Location:
         existing = self.get_by_name(name)
         if existing is not None:
+            # Coordenadas são opcionais e podem chegar depois — se a rota é
+            # salva de novo com lat/long preenchidos, atualiza a location
+            # existente em vez de exigir uma tela de cadastro separada.
+            if latitude is not None:
+                existing.latitude = latitude
+            if longitude is not None:
+                existing.longitude = longitude
             return existing
-        location = Location(tenant_id=self.tenant_id, name=name)
+        location = Location(tenant_id=self.tenant_id, name=name, latitude=latitude, longitude=longitude)
         return self.add(location)
 
 
-def get_or_create_location(db: Session, tenant_id: int, name: str) -> Location:
-    return LocationRepository(db, tenant_id).get_or_create(name.strip())
+def get_or_create_location(
+    db: Session, tenant_id: int, name: str, *, latitude: float | None = None, longitude: float | None = None,
+) -> Location:
+    return LocationRepository(db, tenant_id).get_or_create(name.strip(), latitude=latitude, longitude=longitude)

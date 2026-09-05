@@ -14,6 +14,7 @@ from app.api.v1.license import router as license_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.occurrences import router as occurrences_router
 from app.api.v1.operations import router as operations_router
+from app.api.v1.panel import router as panel_router
 from app.api.v1.platform import router as platform_router
 from app.api.v1.products import router as products_router
 from app.api.v1.reports import router as reports_router
@@ -32,6 +33,7 @@ api_router.include_router(license_router)
 api_router.include_router(notifications_router)
 api_router.include_router(occurrences_router)
 api_router.include_router(operations_router)
+api_router.include_router(panel_router)
 api_router.include_router(platform_router)
 api_router.include_router(products_router)
 api_router.include_router(reports_router)

@@ -14,6 +14,8 @@ from app.services.audit_service import write_audit_log
 def route_to_out(route: Route) -> RouteOut:
     return RouteOut(
         id=route.id, name=route.name, origin_name=route.origin.name, destination_name=route.destination.name,
+        origin_latitude=route.origin.latitude, origin_longitude=route.origin.longitude,
+        destination_latitude=route.destination.latitude, destination_longitude=route.destination.longitude,
         distance_km=route.distance_km, estimated_time_minutes=route.estimated_time_minutes,
         operation_type=route.operation_type, status=route.status,
     )
@@ -41,8 +43,13 @@ def get_route(db: Session, tenant_id: int, route_id: int) -> Route:
 
 def create_route(db: Session, tenant_id: int, actor: User, payload: RouteCreate, ip_address: str | None) -> Route:
     repo = RouteRepository(db, tenant_id)
-    origin = get_or_create_location(db, tenant_id, payload.origin_name)
-    destination = get_or_create_location(db, tenant_id, payload.destination_name)
+    origin = get_or_create_location(
+        db, tenant_id, payload.origin_name, latitude=payload.origin_latitude, longitude=payload.origin_longitude,
+    )
+    destination = get_or_create_location(
+        db, tenant_id, payload.destination_name,
+        latitude=payload.destination_latitude, longitude=payload.destination_longitude,
+    )
 
     route = Route(
         tenant_id=tenant_id, name=payload.name, origin_location_id=origin.id, destination_location_id=destination.id,
@@ -68,14 +75,29 @@ def update_route(
     route = get_route(db, tenant_id, route_id)
     old_value = _as_dict(route)
 
-    fields = payload.model_dump(exclude_unset=True, exclude={"origin_name", "destination_name"})
+    _location_fields = {
+        "origin_name", "destination_name",
+        "origin_latitude", "origin_longitude", "destination_latitude", "destination_longitude",
+    }
+    fields = payload.model_dump(exclude_unset=True, exclude=_location_fields)
     for field, value in fields.items():
         setattr(route, field, value)
-    if payload.origin_name is not None:
-        route.origin = get_or_create_location(db, tenant_id, payload.origin_name)
+    if payload.origin_name is not None or payload.origin_latitude is not None or payload.origin_longitude is not None:
+        origin_name = payload.origin_name if payload.origin_name is not None else route.origin.name
+        route.origin = get_or_create_location(
+            db, tenant_id, origin_name, latitude=payload.origin_latitude, longitude=payload.origin_longitude,
+        )
         route.origin_location_id = route.origin.id
-    if payload.destination_name is not None:
-        route.destination = get_or_create_location(db, tenant_id, payload.destination_name)
+    if (
+        payload.destination_name is not None
+        or payload.destination_latitude is not None
+        or payload.destination_longitude is not None
+    ):
+        destination_name = payload.destination_name if payload.destination_name is not None else route.destination.name
+        route.destination = get_or_create_location(
+            db, tenant_id, destination_name,
+            latitude=payload.destination_latitude, longitude=payload.destination_longitude,
+        )
         route.destination_location_id = route.destination.id
     route.updated_by = actor.id
     db.flush()
