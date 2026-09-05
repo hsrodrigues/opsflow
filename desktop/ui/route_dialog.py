@@ -2,9 +2,9 @@
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
-    QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QSpinBox,
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 from services.api_client import ApiClient
 from services.async_task import ApiWorker
 from services.errors import ApiError
+from ui.widgets import build_dialog_buttons, build_dialog_header
 
 _STATUS_OPTIONS = ["ATIVA", "INATIVA"]
 _OPERATION_TYPES = ["", "ENTREGA", "COLETA", "TRANSFERENCIA"]
@@ -38,6 +39,15 @@ class RouteDialog(QDialog):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(28, 24, 28, 24)
+        layout.setSpacing(6)
+
+        layout.addWidget(build_dialog_header(
+            "🗺️", "IconChipInfo",
+            "Editar rota" if self._route else "Nova rota",
+            "Origem, destino e tempo estimado do trajeto",
+        ))
+        layout.addSpacing(18)
 
         self._error_label = QLabel("")
         self._error_label.setObjectName("ErrorBanner")
@@ -64,10 +74,20 @@ class RouteDialog(QDialog):
         self._distance_input.setSuffix(" km")
         form.addRow("Distância", self._distance_input)
 
-        self._time_input = QSpinBox()
-        self._time_input.setRange(0, 100_000)
-        self._time_input.setSuffix(" min")
-        form.addRow("Tempo estimado", self._time_input)
+        # Horas + minutos em vez de exigir a conta manual em minutos — o
+        # backend continua guardando um total em minutos (`estimated_time_
+        # minutes`), a conversão pros dois campos e de volta é toda daqui.
+        time_row = QHBoxLayout()
+        self._time_hours_input = QSpinBox()
+        self._time_hours_input.setRange(0, 999)
+        self._time_hours_input.setSuffix(" h")
+        time_row.addWidget(self._time_hours_input)
+        self._time_minutes_input = QSpinBox()
+        self._time_minutes_input.setRange(0, 59)
+        self._time_minutes_input.setSuffix(" min")
+        time_row.addWidget(self._time_minutes_input)
+        time_row.addStretch(1)
+        form.addRow("Tempo estimado", time_row)
 
         self._operation_type_combo = QComboBox()
         self._operation_type_combo.addItems(_OPERATION_TYPES)
@@ -79,12 +99,9 @@ class RouteDialog(QDialog):
         form.addRow("Status", self._status_combo)
 
         layout.addLayout(form)
+        layout.addSpacing(8)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
-        buttons.button(QDialogButtonBox.StandardButton.Save).setText("Salvar")
-        buttons.button(QDialogButtonBox.StandardButton.Save).setObjectName("PrimaryButton")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Cancelar")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setObjectName("SecondaryButton")
+        buttons = build_dialog_buttons("Salvar")
         buttons.accepted.connect(self._handle_save_clicked)
         buttons.rejected.connect(self.reject)
         self._buttons = buttons
@@ -95,7 +112,9 @@ class RouteDialog(QDialog):
         self._origin_input.setText(route["origin_name"])
         self._destination_input.setText(route["destination_name"])
         self._distance_input.setValue(route.get("distance_km") or 0)
-        self._time_input.setValue(route.get("estimated_time_minutes") or 0)
+        hours, minutes = divmod(route.get("estimated_time_minutes") or 0, 60)
+        self._time_hours_input.setValue(hours)
+        self._time_minutes_input.setValue(minutes)
         if route.get("operation_type"):
             index = self._operation_type_combo.findText(route["operation_type"])
             if index >= 0:
@@ -112,12 +131,13 @@ class RouteDialog(QDialog):
             self._show_error("Informe nome, origem e destino da rota.")
             return
 
+        total_minutes = self._time_hours_input.value() * 60 + self._time_minutes_input.value()
         payload = {
             "name": name,
             "origin_name": origin,
             "destination_name": destination,
             "distance_km": self._distance_input.value() or None,
-            "estimated_time_minutes": self._time_input.value() or None,
+            "estimated_time_minutes": total_minutes or None,
             "operation_type": self._operation_type_combo.currentText() or None,
         }
         if self._route is not None:

@@ -21,6 +21,7 @@ from services.errors import ApiError
 from ui.route_dialog import RouteDialog
 from ui.theme import apply_shadow
 from ui.widgets import build_badge
+from utils.formatting import format_duration_minutes
 
 _STATUS_FILTER_OPTIONS = [("Todos os status", None), ("Ativa", "ATIVA"), ("Inativa", "INATIVA")]
 _STATUS_DISPLAY = {"ATIVA": ("Ativa", "BadgeSuccess"), "INATIVA": ("Inativa", "BadgeNeutral")}
@@ -154,9 +155,7 @@ class RoutesPage(QWidget):
             self._table.setItem(row, 2, QTableWidgetItem(route["destination_name"]))
             distance = f"{route['distance_km']:.1f} km" if route.get("distance_km") is not None else "—"
             self._table.setItem(row, 3, QTableWidgetItem(distance))
-            time_estimate = (
-                f"{route['estimated_time_minutes']} min" if route.get("estimated_time_minutes") is not None else "—"
-            )
+            time_estimate = format_duration_minutes(route.get("estimated_time_minutes"))
             self._table.setItem(row, 4, QTableWidgetItem(time_estimate))
             text, badge_class = _STATUS_DISPLAY.get(route["status"], (route["status"], "BadgeNeutral"))
             self._table.setCellWidget(row, 5, build_badge(text, badge_class))

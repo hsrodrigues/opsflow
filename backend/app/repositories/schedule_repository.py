@@ -30,6 +30,7 @@ class ScheduleItemRepository(TenantRepository[ScheduleItem]):
             selectinload(ScheduleItem.carrier),
             selectinload(ScheduleItem.vehicle),
             selectinload(ScheduleItem.driver),
+            selectinload(ScheduleItem.product),
             selectinload(ScheduleItem.operation),
         )
 

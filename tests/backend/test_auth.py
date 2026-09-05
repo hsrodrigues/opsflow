@@ -125,3 +125,47 @@ def test_me_endpoint_requires_a_valid_bearer_token(client, db_session):
     authenticated = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {access_token}"})
     assert authenticated.status_code == 200
     assert authenticated.json()["email"] == "me@empresa-teste.com"
+
+
+def test_any_role_can_update_own_profile_without_users_manage_permission(client, db_session):
+    """Seção 26 (Configurações): editar o próprio nome/telefone é
+    self-service pra qualquer papel — inclusive VISUALIZADOR, que não tem a
+    permissão `users.manage` exigida por `PATCH /users/{id}` (essa segue
+    exclusiva do admin, sobre QUALQUER usuário; esta aqui só sobre si mesmo)."""
+    tenant = make_tenant(db_session)
+    make_user(db_session, tenant, email="viewer@empresa-teste.com", password="Sup3rSecret!", role_code="VISUALIZADOR")
+    db_session.commit()
+    login_response = client.post(
+        "/api/v1/auth/login", json={"email": "viewer@empresa-teste.com", "password": "Sup3rSecret!"}
+    )
+    access_token = login_response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    response = client.patch(
+        "/api/v1/auth/me", headers=headers, json={"full_name": "Novo Nome", "phone": "(11) 91234-5678"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["full_name"] == "Novo Nome"
+    assert body["phone"] == "(11) 91234-5678"
+
+    confirm = client.get("/api/v1/auth/me", headers=headers)
+    assert confirm.json()["full_name"] == "Novo Nome"
+
+
+def test_update_own_profile_requires_authentication(client):
+    response = client.patch("/api/v1/auth/me", json={"full_name": "X"})
+    assert response.status_code == 401
+
+
+def test_update_own_profile_rejects_empty_name(client, db_session):
+    tenant = make_tenant(db_session)
+    make_user(db_session, tenant, email="emptyname@empresa-teste.com", password="Sup3rSecret!")
+    db_session.commit()
+    login_response = client.post(
+        "/api/v1/auth/login", json={"email": "emptyname@empresa-teste.com", "password": "Sup3rSecret!"}
+    )
+    headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
+
+    response = client.patch("/api/v1/auth/me", headers=headers, json={"full_name": ""})
+    assert response.status_code == 422

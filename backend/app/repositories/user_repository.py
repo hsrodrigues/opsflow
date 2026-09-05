@@ -7,7 +7,7 @@ have none at all). Every other user operation, once a session is
 authenticated, goes through `UserRepository`, which is tenant-scoped like
 every other `TenantRepository`.
 """
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.role import Role
@@ -35,3 +35,21 @@ class UserRepository(TenantRepository[User]):
     """Tenant-scoped user operations, for use once a request is authenticated."""
 
     model = User
+
+    def _base_query(self):
+        return super()._base_query().options(selectinload(User.roles))
+
+    def search(
+        self, *, query: str | None = None, status: str | None = None, limit: int = 20, offset: int = 0,
+    ) -> tuple[list[User], int]:
+        stmt = self._base_query()
+        if query:
+            like = f"%{query}%"
+            stmt = stmt.where(or_(User.full_name.ilike(like), User.email.ilike(like)))
+        if status:
+            stmt = stmt.where(User.status == status)
+
+        total = self.db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
+        items_stmt = stmt.order_by(User.full_name).limit(limit).offset(offset)
+        items = list(self.db.execute(items_stmt).scalars().all())
+        return items, total

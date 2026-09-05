@@ -12,7 +12,7 @@ import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.core.config import get_settings
-from app.jobs import cnh_alerts, delay_detection, license_expiration
+from app.jobs import backup_job, cnh_alerts, delay_detection, license_expiration, stale_operations_job
 
 logger = logging.getLogger("opsflow.jobs.scheduler")
 
@@ -40,6 +40,14 @@ def start_scheduler() -> None:
     _scheduler.add_job(
         license_expiration.run, "interval", minutes=settings.license_expiration_interval_minutes,
         id="license_expiration", replace_existing=True,
+    )
+    _scheduler.add_job(
+        backup_job.run, "interval", hours=settings.backup_interval_hours,
+        id="backup_job", replace_existing=True,
+    )
+    _scheduler.add_job(
+        stale_operations_job.run, "interval", minutes=settings.stale_operations_interval_minutes,
+        id="stale_operations_job", replace_existing=True,
     )
     _scheduler.start()
     logger.info("Scheduler de jobs iniciado (%d jobs registrados).", len(_scheduler.get_jobs()))

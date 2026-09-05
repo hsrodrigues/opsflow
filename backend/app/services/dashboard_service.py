@@ -30,7 +30,7 @@ class DashboardFilters:
     shift: str | None = None
 
 
-def _apply_filters(stmt, tenant_id: int, filters: DashboardFilters, *, with_status: bool = True):
+def apply_schedule_filters(stmt, tenant_id: int, filters: DashboardFilters, *, with_status: bool = True):
     stmt = (
         stmt.join(Schedule, ScheduleItem.schedule_id == Schedule.id)
         .where(ScheduleItem.tenant_id == tenant_id, ScheduleItem.deleted_at.is_(None))
@@ -63,11 +63,11 @@ def _default_filters(filters: DashboardFilters) -> DashboardFilters:
 def get_summary(db: Session, tenant_id: int, filters: DashboardFilters) -> DashboardSummary:
     filters = _default_filters(filters)
 
-    total_stmt = _apply_filters(select(func.count(ScheduleItem.id)), tenant_id, filters, with_status=False)
+    total_stmt = apply_schedule_filters(select(func.count(ScheduleItem.id)), tenant_id, filters, with_status=False)
     total = db.execute(total_stmt).scalar_one()
 
     def _count_by_status(status: ScheduleStatus) -> int:
-        stmt = _apply_filters(select(func.count(ScheduleItem.id)), tenant_id, filters, with_status=False)
+        stmt = apply_schedule_filters(select(func.count(ScheduleItem.id)), tenant_id, filters, with_status=False)
         stmt = stmt.where(ScheduleItem.status == status)
         return db.execute(stmt).scalar_one()
 
@@ -102,8 +102,8 @@ def get_summary(db: Session, tenant_id: int, filters: DashboardFilters) -> Dashb
             Operation.started_at.is_not(None), Operation.completed_at.is_not(None),
         )
     )
-    # `_apply_filters` já faz o JOIN com `Schedule` — não duplicar aqui.
-    duration_rows_stmt = _apply_filters(duration_rows_stmt, tenant_id, filters, with_status=False)
+    # `apply_schedule_filters` já faz o JOIN com `Schedule` — não duplicar aqui.
+    duration_rows_stmt = apply_schedule_filters(duration_rows_stmt, tenant_id, filters, with_status=False)
     durations = [
         (completed - started).total_seconds() / 60
         for started, completed in db.execute(duration_rows_stmt).all()
@@ -132,14 +132,14 @@ def get_summary(db: Session, tenant_id: int, filters: DashboardFilters) -> Dashb
 def get_charts(db: Session, tenant_id: int, filters: DashboardFilters) -> DashboardCharts:
     filters = _default_filters(filters)
 
-    por_dia_stmt = _apply_filters(
+    por_dia_stmt = apply_schedule_filters(
         select(Schedule.schedule_date, func.count(ScheduleItem.id)), tenant_id, filters, with_status=False,
     ).group_by(Schedule.schedule_date).order_by(Schedule.schedule_date)
     operacoes_por_dia = [
         ChartPoint(label=str(day), value=count) for day, count in db.execute(por_dia_stmt).all()
     ]
 
-    por_transportadora_stmt = _apply_filters(
+    por_transportadora_stmt = apply_schedule_filters(
         select(Carrier.legal_name, func.count(ScheduleItem.id))
         .select_from(ScheduleItem)
         .join(Carrier, ScheduleItem.carrier_id == Carrier.id),
@@ -149,7 +149,7 @@ def get_charts(db: Session, tenant_id: int, filters: DashboardFilters) -> Dashbo
         ChartPoint(label=name, value=count) for name, count in db.execute(por_transportadora_stmt).all()
     ]
 
-    por_status_stmt = _apply_filters(
+    por_status_stmt = apply_schedule_filters(
         select(ScheduleItem.status, func.count(ScheduleItem.id)), tenant_id, filters, with_status=False,
     ).group_by(ScheduleItem.status)
     operacoes_por_status = [

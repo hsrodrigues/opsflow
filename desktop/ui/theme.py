@@ -10,11 +10,19 @@ switching theme at runtime (seção 26) just re-renders the same template
 with the other palette, applied to the whole `QApplication`. `apply_shadow`
 adds the soft elevation QSS itself cannot express (`box-shadow` has no Qt
 Style Sheets equivalent) via `QGraphicsDropShadowEffect`.
+
+The look leans into a "fintech" register (Stripe/Nubank/Revolut-style
+dashboards) rather than flat default-Qt: a two-tone indigo→violet gradient
+(instead of one flat accent) drives the primary CTA, the brand mark and the
+login screen's brand panel; corners are generously rounded (12-28px
+depending on the element's size, buttons go full pill); and elevation uses
+a soft accent-tinted glow on the highest-emphasis surfaces instead of a
+plain black drop shadow everywhere.
 """
 from dataclasses import dataclass
 
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QApplication, QGraphicsDropShadowEffect, QWidget
+from PySide6.QtWidgets import QApplication, QGraphicsDropShadowEffect, QScrollArea, QWidget
 
 
 @dataclass(frozen=True)
@@ -34,6 +42,7 @@ class Palette:
     sidebar_text_muted: str
     sidebar_active: str
     accent: str
+    accent2: str
     accent_hover: str
     accent_pressed: str
     accent_text: str
@@ -49,7 +58,7 @@ LIGHT = Palette(
     text="#101828", text_muted="#5B6474", text_faint="#98A2B3",
     sidebar_bg="#111827", sidebar_bg_end="#0B1120",
     sidebar_text="#F0F2F7", sidebar_text_muted="#8891A5", sidebar_active="#1D2436",
-    accent="#4338CA", accent_hover="#372DAD", accent_pressed="#2E2590", accent_text="#FFFFFF",
+    accent="#4338CA", accent2="#7C3AED", accent_hover="#372DAD", accent_pressed="#2E2590", accent_text="#FFFFFF",
     success="#0B8A5E", warning="#B45E09", danger="#C42B2B",
     shadow="#0F1A2E",
 )
@@ -60,10 +69,26 @@ DARK = Palette(
     text="#E7EAF2", text_muted="#909BB0", text_faint="#5D6981",
     sidebar_bg="#080B13", sidebar_bg_end="#0B1120",
     sidebar_text="#EDEFF5", sidebar_text_muted="#6B7590", sidebar_active="#1B2333",
-    accent="#6366F1", accent_hover="#7A7DF5", accent_pressed="#5457D8", accent_text="#0B0F1A",
+    accent="#6366F1", accent2="#8B5CFF", accent_hover="#7A7DF5", accent_pressed="#5457D8", accent_text="#0B0F1A",
     success="#2FBF8F", warning="#E8A93D", danger="#F0645F",
     shadow="#000000",
 )
+
+# Painel de marca do login (seção 5): gradiente fixo, independente do tema
+# claro/escuro — como em telas de autenticação de apps fintech, a cor de
+# marca não muda com o tema do sistema, só o painel do formulário muda.
+_BRAND_GRADIENT = "qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #4338CA, stop:0.55 #6D28D9, stop:1 #1E1B4B)"
+
+# Pares de cor (início/fim do gradiente) para os "chips" de ícone dos
+# cartões de indicador (KPI) — fixos nos dois temas, como os badges de
+# status, porque carregam significado semântico (sucesso/alerta/perigo).
+_ICON_CHIP_GRADIENTS = {
+    "IconChipInfo": ("#4338CA", "#7C3AED"),
+    "IconChipSuccess": ("#059669", "#10B981"),
+    "IconChipWarning": ("#D97706", "#F59E0B"),
+    "IconChipDanger": ("#DC2626", "#F43F5E"),
+    "IconChipNeutral": ("#475569", "#64748B"),
+}
 
 
 def _rgba(hex_color: str, alpha: float) -> str:
@@ -75,6 +100,15 @@ def _rgba(hex_color: str, alpha: float) -> str:
     """
     r, g, b = (int(hex_color[i : i + 2], 16) for i in (1, 3, 5))
     return f"rgba({r}, {g}, {b}, {alpha})"
+
+
+def _gradient(c1: str, c2: str, *, diagonal: bool = True) -> str:
+    """Two-stop QSS gradient — `qlineargradient` is a native Qt Style Sheets
+    property (not CSS), used for the brand's signature indigo→violet accent
+    instead of a single flat fill.
+    """
+    x2, y2 = (1, 1) if diagonal else (0, 1)
+    return f"qlineargradient(x1:0, y1:0, x2:{x2}, y2:{y2}, stop:0 {c1}, stop:1 {c2})"
 
 
 _DOWN_ARROW_SVG = (
@@ -93,6 +127,14 @@ def build_stylesheet(p: Palette) -> str:
     success_wash = _rgba(p.success, 0.14)
     focus_ring = _rgba(p.accent, 0.22)
     down_arrow = _DOWN_ARROW_SVG.format(color=p.text_muted.replace("#", "%23"))
+    accent_gradient = _gradient(p.accent, p.accent2)
+    accent_gradient_hover = _gradient(p.accent_hover, p.accent2)
+    accent_gradient_pressed = _gradient(p.accent_pressed, p.accent2)
+
+    icon_chip_rules = "\n".join(
+        f"    QWidget#{name} {{ background: {_gradient(c1, c2)}; border-radius: 14px; }}"
+        for name, (c1, c2) in _ICON_CHIP_GRADIENTS.items()
+    )
 
     return f"""
     * {{
@@ -109,17 +151,43 @@ def build_stylesheet(p: Palette) -> str:
         padding: 6px 10px; font-size: 12px;
     }}
 
+    /* ---------- tela de login: painel de marca ---------- */
+    QWidget#LoginBrandPanel {{ background: {_BRAND_GRADIENT}; }}
+    QWidget#LoginBrandBlob {{ background: {_rgba('#FFFFFF', 0.07)}; border-radius: 999px; }}
+    QWidget#LoginFormPanel {{ background: {p.bg}; }}
+    QLabel#LoginBrandKicker {{
+        color: {_rgba('#FFFFFF', 0.78)}; font-size: 11.5px; font-weight: 700; letter-spacing: 2.5px;
+    }}
+    QLabel#LoginHeadline {{
+        color: #FFFFFF; font-size: 34px; font-weight: 800; letter-spacing: -0.6px;
+    }}
+    QLabel#LoginSubheadline {{
+        color: {_rgba('#FFFFFF', 0.74)}; font-size: 14.5px;
+    }}
+    QWidget#LoginFeatureIcon {{
+        background: {_rgba('#FFFFFF', 0.12)}; border: 1px solid {_rgba('#FFFFFF', 0.20)}; border-radius: 12px;
+    }}
+    QLabel#LoginFeatureGlyph {{ font-size: 17px; }}
+    QLabel#LoginFeatureTitle {{ color: #FFFFFF; font-size: 13px; font-weight: 700; }}
+    QLabel#LoginFeatureDesc {{ color: {_rgba('#FFFFFF', 0.62)}; font-size: 12px; }}
+
     /* ---------- cartão de login ---------- */
     QWidget#LoginCard {{
         background: {p.surface};
-        border-radius: 16px;
+        border-radius: 24px;
         border: 1px solid {p.border};
     }}
     QWidget#LoginLogo {{
-        background: {p.accent};
+        background: {accent_gradient};
         border-radius: 14px;
     }}
     QLabel#LoginLogoGlyph {{ color: {p.accent_text}; font-size: 22px; font-weight: 700; }}
+
+    /* Painel de notificações (seção 20): NÃO estilizado aqui de propósito.
+    É um QWidget de topo com WA_TranslucentBackground, e essa combinação não
+    pinta um `background` de QSS de forma confiável (o fundo arredondado é
+    pintado à mão no `paintEvent` de `ui/notification_panel.py`, que lê estas
+    mesmas cores — `Palette.surface`/`Palette.border` — direto do Python). */
 
     /* ---------- barra lateral ---------- */
     QWidget#Sidebar {{
@@ -142,7 +210,7 @@ def build_stylesheet(p: Palette) -> str:
     QPushButton#NavItem:hover {{ background: {_rgba('#FFFFFF', 0.05)}; color: {p.sidebar_text}; }}
     QPushButton#NavItem:checked {{
         background: {_rgba('#FFFFFF', 0.07)}; color: {p.sidebar_text}; font-weight: 600;
-        border-left: 3px solid {p.accent};
+        border-left: 3px solid {p.accent2};
     }}
     QPushButton#NavItem:disabled {{ color: {p.sidebar_text_muted}; }}
 
@@ -156,15 +224,25 @@ def build_stylesheet(p: Palette) -> str:
     QLabel#StatusOnline {{ color: {p.success}; font-weight: 600; }}
     QLabel#StatusOffline {{ color: {p.danger}; font-weight: 600; }}
     QLabel#Avatar {{
-        background: {p.accent}; color: {p.accent_text}; border-radius: 15px; font-weight: 700; font-size: 12px;
+        background: {accent_gradient}; color: {p.accent_text}; border-radius: 15px; font-weight: 700; font-size: 12px;
     }}
 
     /* ---------- cartões ---------- */
     QFrame#Card {{
-        background: {p.surface}; border: 1px solid {p.border}; border-radius: 12px;
+        background: {p.surface}; border: 1px solid {p.border}; border-radius: 16px;
     }}
-    QLabel#CardValue {{ font-size: 25px; font-weight: 700; }}
+    QLabel#CardValue {{ font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }}
     QLabel#CardLabel {{ color: {p.text_muted}; font-size: 11.5px; font-weight: 600; letter-spacing: 0.3px; }}
+
+    /* ---------- chips de ícone dos cartões de indicador (KPI) ---------- */
+{icon_chip_rules}
+    QLabel#IconChipGlyph {{ font-size: 19px; }}
+
+    /* ---------- barra de uso do plano (tela de Licença) ---------- */
+    QWidget#UsageBarTrack {{ background: {p.surface_alt}; border-radius: 4px; }}
+    QWidget#UsageBarFillNormal {{ background: {accent_gradient}; border-radius: 4px; }}
+    QWidget#UsageBarFillWarning {{ background: {p.warning}; border-radius: 4px; }}
+    QWidget#UsageBarFillDanger {{ background: {p.danger}; border-radius: 4px; }}
 
     /* ---------- badges de status (pill) ---------- */
     QLabel[badge="true"] {{
@@ -177,34 +255,63 @@ def build_stylesheet(p: Palette) -> str:
     QLabel#BadgeNeutral {{ background: {p.surface_alt}; color: {p.text_muted}; }}
 
     /* ---------- campos de formulário ---------- */
-    QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QDateEdit, QTextEdit {{
-        background: {p.surface_alt}; border: 1px solid {p.border}; border-radius: 9px;
+    QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QDateEdit, QDateTimeEdit, QTextEdit {{
+        background: {p.surface_alt}; border: 1px solid {p.border}; border-radius: 12px;
         padding: 9px 12px; selection-background-color: {p.accent}; selection-color: {p.accent_text};
         min-height: 18px;
     }}
-    QLineEdit:hover, QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover {{ border: 1px solid {p.border_strong}; }}
-    QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus, QTextEdit:focus {{
+    /* O texto "dd/MM/yyyy HH:mm" + o botão do calendário (28px, ver
+       `::drop-down` abaixo) não cabem no sizeHint padrão que o Qt calcula
+       pra esses widgets quando não têm largura própria definida (ex.: os
+       filtros de período do Dashboard/Programação) — sem isto, o fim do ano
+       fica cortado atrás do botão. */
+    QDateEdit, QDateTimeEdit {{ min-width: 152px; }}
+    QLineEdit:hover, QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover,
+    QDateEdit:hover, QDateTimeEdit:hover {{ border: 1px solid {p.border_strong}; }}
+    QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus,
+    QDateEdit:focus, QDateTimeEdit:focus, QTextEdit:focus {{
         border: 1px solid {p.accent}; background: {p.surface};
     }}
-    QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled {{
+    QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled,
+    QDateEdit:disabled, QDateTimeEdit:disabled {{
         background: {p.surface_alt}; color: {p.text_faint}; border: 1px solid {p.border};
     }}
-    QComboBox::drop-down {{ border: none; width: 28px; }}
-    QComboBox::down-arrow {{ image: url("{down_arrow}"); width: 10px; height: 6px; }}
+    QComboBox::drop-down, QDateEdit::drop-down, QDateTimeEdit::drop-down {{ border: none; width: 28px; }}
+    QComboBox::down-arrow, QDateEdit::down-arrow, QDateTimeEdit::down-arrow {{
+        image: url("{down_arrow}"); width: 10px; height: 6px;
+    }}
     QComboBox QAbstractItemView {{
-        background: {p.surface}; border: 1px solid {p.border}; border-radius: 8px; padding: 4px;
+        background: {p.surface}; border: 1px solid {p.border}; border-radius: 10px; padding: 4px;
         selection-background-color: {accent_wash_strong}; selection-color: {p.accent}; outline: none;
     }}
     QSpinBox::up-button, QDoubleSpinBox::up-button {{
-        subcontrol-position: top right; width: 20px; border: none; border-top-right-radius: 9px;
+        subcontrol-position: top right; width: 20px; border: none; border-top-right-radius: 12px;
     }}
     QSpinBox::down-button, QDoubleSpinBox::down-button {{
-        subcontrol-position: bottom right; width: 20px; border: none; border-bottom-right-radius: 9px;
+        subcontrol-position: bottom right; width: 20px; border: none; border-bottom-right-radius: 12px;
     }}
     QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
     QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {{ background: {p.surface_hover}; }}
     QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{ image: url("{down_arrow}"); width: 8px; height: 5px; }}
     QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{ image: url("{down_arrow}"); width: 8px; height: 5px; }}
+
+    /* ---------- calendário (popup do QDateEdit/QDateTimeEdit) ---------- */
+    QCalendarWidget {{ background: {p.surface}; border: 1px solid {p.border}; border-radius: 12px; }}
+    QCalendarWidget QWidget#qt_calendar_navigationbar {{ background: {p.surface_alt}; border-top-left-radius: 12px; border-top-right-radius: 12px; }}
+    QCalendarWidget QToolButton {{
+        background: transparent; color: {p.text}; border: none; border-radius: 8px;
+        padding: 6px 8px; font-weight: 600; icon-size: 16px, 16px;
+    }}
+    QCalendarWidget QToolButton:hover {{ background: {p.surface_hover}; }}
+    QCalendarWidget QToolButton::menu-indicator {{ image: none; }}
+    QCalendarWidget QSpinBox {{ background: {p.surface}; border: 1px solid {p.border}; border-radius: 6px; padding: 2px 4px; }}
+    QCalendarWidget QAbstractItemView {{
+        background: {p.surface}; color: {p.text}; selection-background-color: {p.accent};
+        selection-color: {p.accent_text}; outline: none; border: none;
+        alternate-background-color: {p.surface};
+    }}
+    QCalendarWidget QAbstractItemView:disabled {{ color: {p.text_faint}; }}
+    QCalendarWidget QMenu {{ background: {p.surface}; border: 1px solid {p.border}; border-radius: 10px; }}
 
     QCheckBox {{ spacing: 9px; }}
     QCheckBox::indicator {{
@@ -221,23 +328,23 @@ def build_stylesheet(p: Palette) -> str:
 
     /* ---------- botões ---------- */
     QPushButton#PrimaryButton {{
-        background: {p.accent}; color: {p.accent_text}; border: none; border-radius: 9px;
-        padding: 10px 18px; font-weight: 600;
+        background: {accent_gradient}; color: {p.accent_text}; border: none; border-radius: 20px;
+        padding: 11px 22px; font-weight: 700; letter-spacing: 0.2px;
     }}
-    QPushButton#PrimaryButton:hover {{ background: {p.accent_hover}; }}
-    QPushButton#PrimaryButton:pressed {{ background: {p.accent_pressed}; }}
+    QPushButton#PrimaryButton:hover {{ background: {accent_gradient_hover}; }}
+    QPushButton#PrimaryButton:pressed {{ background: {accent_gradient_pressed}; }}
     QPushButton#PrimaryButton:disabled {{ background: {p.border}; color: {p.text_faint}; }}
 
     QPushButton#SecondaryButton {{
-        background: {p.surface}; color: {p.text}; border: 1px solid {p.border_strong}; border-radius: 9px;
-        padding: 9px 17px; font-weight: 600;
+        background: {p.surface}; color: {p.text}; border: 1px solid {p.border_strong}; border-radius: 20px;
+        padding: 10px 21px; font-weight: 600;
     }}
     QPushButton#SecondaryButton:hover {{ background: {p.surface_hover}; }}
     QPushButton#SecondaryButton:pressed {{ background: {p.surface_alt}; }}
 
     QPushButton#DangerButton {{
-        background: {p.danger}; color: #FFFFFF; border: none; border-radius: 9px;
-        padding: 10px 18px; font-weight: 600;
+        background: {p.danger}; color: #FFFFFF; border: none; border-radius: 20px;
+        padding: 11px 22px; font-weight: 700;
     }}
     QPushButton#DangerButton:hover {{ background: {p.danger}; }}
 
@@ -255,28 +362,28 @@ def build_stylesheet(p: Palette) -> str:
     QPushButton#DangerLinkButton:hover {{ background: {danger_wash}; }}
 
     QPushButton#IconButton {{
-        background: transparent; border: none; border-radius: 9px; padding: 6px;
+        background: transparent; border: none; border-radius: 16px; padding: 6px;
     }}
     QPushButton#IconButton:hover {{ background: {p.surface_alt}; }}
 
     /* ---------- avisos ---------- */
     QLabel#ErrorBanner {{
         background: {danger_wash}; color: {p.danger}; border: 1px solid {danger_border};
-        border-radius: 9px; padding: 10px 14px; font-weight: 500;
+        border-radius: 12px; padding: 10px 14px; font-weight: 500;
     }}
     QLabel#LicenseBannerTrial {{
         background: {warning_wash}; color: {p.warning}; border: 1px solid {warning_border};
-        border-radius: 9px; padding: 10px 14px; font-weight: 500;
+        border-radius: 12px; padding: 10px 14px; font-weight: 500;
     }}
     QLabel#LicenseBannerExpired {{
         background: {danger_wash}; color: {p.danger}; border: 1px solid {danger_border};
-        border-radius: 9px; padding: 10px 14px; font-weight: 500;
+        border-radius: 12px; padding: 10px 14px; font-weight: 500;
     }}
 
     /* ---------- tabela ---------- */
     QTableWidget {{
         background: {p.surface}; alternate-background-color: {p.surface_alt};
-        gridline-color: transparent; border: 1px solid {p.border}; border-radius: 12px;
+        gridline-color: transparent; border: 1px solid {p.border}; border-radius: 16px;
         selection-background-color: {accent_wash_strong}; selection-color: {p.text};
     }}
     QTableWidget::item {{ padding: 8px 4px; border-bottom: 1px solid {p.border}; }}
@@ -285,8 +392,8 @@ def build_stylesheet(p: Palette) -> str:
         background: {p.surface_alt}; color: {p.text_muted}; padding: 10px 8px; border: none;
         border-bottom: 1px solid {p.border}; font-weight: 700; font-size: 11px; letter-spacing: 0.4px;
     }}
-    QHeaderView::section:first {{ border-top-left-radius: 12px; }}
-    QHeaderView::section:last {{ border-top-right-radius: 12px; }}
+    QHeaderView::section:first {{ border-top-left-radius: 16px; }}
+    QHeaderView::section:last {{ border-top-right-radius: 16px; }}
     QTableCornerButton::section {{ background: {p.surface_alt}; border: none; }}
 
     /* ---------- barras de rolagem ---------- */
@@ -322,10 +429,34 @@ def apply_theme(app: QApplication, *, dark: bool) -> Palette:
     return palette
 
 
-def apply_shadow(widget: QWidget, *, blur: int = 28, y_offset: int = 8, alpha: int = 45) -> None:
-    """Soft drop shadow (Qt Style Sheets has no `box-shadow` equivalent)."""
+def make_scroll_area_transparent(scroll: QScrollArea) -> None:
+    """`QScrollArea`'s internal viewport is a separate widget that paints its
+    own native palette background regardless of the app's QSS — the same
+    "follows the OS theme, not the app theme" bug as `QChartView`
+    (`dashboard_page.py`'s `_build_chart_placeholder`), just for a different
+    Qt widget family. Unlike that one, this can't even be fixed via QSS
+    selectors at all (confirmed: neither `QScrollArea { background: ... }`
+    nor a `QScrollArea > QWidget` child selector reaches the viewport when
+    set through `QApplication.setStyleSheet`) — the viewport's own
+    stylesheet has to be set directly, procedurally, which is what this
+    does. Call once, right after constructing the `QScrollArea`.
+    """
+    scroll.viewport().setStyleSheet("background: transparent;")
+
+
+def apply_shadow(
+    widget: QWidget, *, blur: int = 28, y_offset: int = 8, alpha: int = 45,
+    color: tuple[int, int, int] = (0, 0, 0),
+) -> None:
+    """Soft drop shadow (Qt Style Sheets has no `box-shadow` equivalent).
+
+    `color` defaults to black (a conventional neutral elevation shadow);
+    pass an accent RGB tuple for the colored "glow" used on high-emphasis
+    surfaces like the login card.
+    """
     effect = QGraphicsDropShadowEffect(widget)
     effect.setBlurRadius(blur)
     effect.setOffset(0, y_offset)
-    effect.setColor(QColor(0, 0, 0, alpha))
+    r, g, b = color
+    effect.setColor(QColor(r, g, b, alpha))
     widget.setGraphicsEffect(effect)

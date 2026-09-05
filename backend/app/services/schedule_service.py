@@ -6,8 +6,9 @@ the `Operation` row (and its `operation_number`); every call after that just
 advances the same `Operation` and appends a `StatusHistory` row — the
 timeline shown in the UI.
 """
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import NotFoundError, ValidationFailedError
@@ -15,8 +16,9 @@ from app.models.carrier import Carrier
 from app.models.driver import Driver
 from app.models.enums import AuditAction, ScheduleStatus
 from app.models.operation import Operation
+from app.models.product import Product
 from app.models.route import Route
-from app.models.schedule import ScheduleItem
+from app.models.schedule import Schedule, ScheduleItem
 from app.models.status_history import StatusHistory
 from app.models.user import User
 from app.models.vehicle import Vehicle
@@ -35,6 +37,8 @@ def schedule_item_to_out(item: ScheduleItem) -> ScheduleItemOut:
         route_name=item.route.name, carrier_name=item.carrier.legal_name if item.carrier else None,
         vehicle_plate=item.vehicle.plate if item.vehicle else None,
         driver_name=item.driver.full_name if item.driver else None,
+        product_name=item.product.name if item.product else None,
+        unit_of_measure=item.product.unit_of_measure if item.product else None,
         scheduled_at=item.scheduled_at, cargo_description=item.cargo_description, quantity=item.quantity,
         notes=item.notes, status=item.status,
         operation_number=item.operation.operation_number if item.operation else None,
@@ -43,13 +47,14 @@ def schedule_item_to_out(item: ScheduleItem) -> ScheduleItemOut:
 
 def _validate_references(
     db: Session, tenant_id: int, *, route_id: int | None, carrier_id: int | None, vehicle_id: int | None,
-    driver_id: int | None,
+    driver_id: int | None, product_id: int | None = None,
 ) -> None:
     checks = [
         (route_id, Route, "Rota informada não existe ou não pertence à sua empresa."),
         (carrier_id, Carrier, "Transportadora informada não existe ou não pertence à sua empresa."),
         (vehicle_id, Vehicle, "Veículo informado não existe ou não pertence à sua empresa."),
         (driver_id, Driver, "Motorista informado não existe ou não pertence à sua empresa."),
+        (product_id, Product, "Produto informado não existe ou não pertence à sua empresa."),
     ]
     for record_id, model, message in checks:
         if record_id is None:
@@ -79,13 +84,14 @@ def create_schedule_item(
 ) -> ScheduleItem:
     _validate_references(
         db, tenant_id, route_id=payload.route_id, carrier_id=payload.carrier_id,
-        vehicle_id=payload.vehicle_id, driver_id=payload.driver_id,
+        vehicle_id=payload.vehicle_id, driver_id=payload.driver_id, product_id=payload.product_id,
     )
     schedule = ScheduleRepository(db, tenant_id).get_or_create(payload.schedule_date, payload.shift)
 
     item = ScheduleItem(
         tenant_id=tenant_id, schedule_id=schedule.id, route_id=payload.route_id, carrier_id=payload.carrier_id,
-        vehicle_id=payload.vehicle_id, driver_id=payload.driver_id, scheduled_at=payload.scheduled_at,
+        vehicle_id=payload.vehicle_id, driver_id=payload.driver_id, product_id=payload.product_id,
+        scheduled_at=payload.scheduled_at,
         cargo_description=payload.cargo_description, quantity=payload.quantity, notes=payload.notes,
         created_by=actor.id, updated_by=actor.id,
     )
@@ -108,6 +114,7 @@ def update_schedule_item(
         db, tenant_id,
         route_id=fields.get("route_id", item.route_id), carrier_id=fields.get("carrier_id", item.carrier_id),
         vehicle_id=fields.get("vehicle_id", item.vehicle_id), driver_id=fields.get("driver_id", item.driver_id),
+        product_id=fields.get("product_id", item.product_id),
     )
     for field, value in fields.items():
         setattr(item, field, value)
@@ -121,6 +128,26 @@ def update_schedule_item(
     db.commit()
     db.refresh(item)
     return item
+
+
+def delete_schedule_item(db: Session, tenant_id: int, actor: User, item_id: int, ip_address: str | None) -> None:
+    """Só permite excluir enquanto a programação ainda está em PROGRAMADO —
+    uma vez que vira uma `Operation` (seção 21), ela carrega histórico
+    operacional de verdade e não pode simplesmente desaparecer; a partir daí
+    o caminho é `change_status` para CANCELADO, não exclusão.
+    """
+    item = get_schedule_item(db, tenant_id, item_id)
+    if item.status != ScheduleStatus.PROGRAMADO:
+        raise ValidationFailedError(
+            "Só é possível excluir uma programação enquanto ela ainda não começou a ser executada."
+        )
+    repo = ScheduleItemRepository(db, tenant_id)
+    repo.soft_delete(item)
+    write_audit_log(
+        db, tenant_id=tenant_id, user_id=actor.id, action=AuditAction.DELETE, table_name="schedule_items",
+        record_id=str(item_id), ip_address=ip_address,
+    )
+    db.commit()
 
 
 def change_status(
@@ -175,6 +202,73 @@ def change_status(
     db.commit()
     db.refresh(item)
     return item
+
+
+def duplicate_schedule_day(
+    db: Session, tenant_id: int, actor: User, source_date: date, target_date: date, ip_address: str | None = None,
+) -> int:
+    """Clona toda a programação (todos os turnos) de `source_date` pra
+    `target_date` — pedido explícito do cliente pra reduzir reentrada manual
+    de rotas recorrentes ("poucos processos manuais"). Só duplica itens
+    ainda não cancelados; sempre cria PROGRAMADO na data nova, mesmo que o
+    original já tenha avançado de status. Em MySQL, delega pra `sp_
+    duplicate_schedule_day` (uma viagem ao banco, atômica); em qualquer
+    outro dialeto (SQLite dos testes), replica a MESMA regra via ORM —
+    ver a stored procedure na migration `..._stored_procedures.py` pro
+    corpo SQL espelhado aqui.
+    """
+    if source_date == target_date:
+        raise ValidationFailedError("A data de destino precisa ser diferente da data de origem.")
+
+    if db.get_bind().dialect.name == "mysql":
+        result = db.execute(
+            text("CALL sp_duplicate_schedule_day(:tenant_id, :source_date, :target_date, :actor_id)"),
+            {"tenant_id": tenant_id, "source_date": source_date, "target_date": target_date, "actor_id": actor.id},
+        )
+        row = result.fetchone()
+        items_created = int(row[0]) if row else 0
+        # PyMySQL exige drenar qualquer result set pendente antes da conexão
+        # aceitar outro comando — uma CALL sempre conta como um, mesmo só
+        # com um SELECT dentro do corpo da procedure.
+        result.close()
+    else:
+        items_created = _duplicate_schedule_day_fallback(db, tenant_id, actor, source_date, target_date)
+
+    write_audit_log(
+        db, tenant_id=tenant_id, user_id=actor.id, action=AuditAction.CREATE, table_name="schedule_items",
+        record_id=f"duplicated {source_date}->{target_date}", ip_address=ip_address,
+    )
+    db.commit()
+    return items_created
+
+
+def _duplicate_schedule_day_fallback(
+    db: Session, tenant_id: int, actor: User, source_date: date, target_date: date,
+) -> int:
+    source_schedules = db.execute(
+        select(Schedule).where(Schedule.tenant_id == tenant_id, Schedule.schedule_date == source_date)
+    ).scalars().all()
+
+    items_created = 0
+    for source_schedule in source_schedules:
+        target_schedule = ScheduleRepository(db, tenant_id).get_or_create(target_date, source_schedule.shift)
+        items = db.execute(
+            select(ScheduleItem).where(
+                ScheduleItem.schedule_id == source_schedule.id, ScheduleItem.deleted_at.is_(None),
+                ScheduleItem.status != ScheduleStatus.CANCELADO,
+            )
+        ).scalars().all()
+        for item in items:
+            db.add(ScheduleItem(
+                tenant_id=tenant_id, schedule_id=target_schedule.id, route_id=item.route_id,
+                carrier_id=item.carrier_id, vehicle_id=item.vehicle_id, driver_id=item.driver_id,
+                product_id=item.product_id, scheduled_at=datetime.combine(target_date, item.scheduled_at.time()),
+                cargo_description=item.cargo_description, quantity=item.quantity, notes=item.notes,
+                status=ScheduleStatus.PROGRAMADO, created_by=actor.id, updated_by=actor.id,
+            ))
+            items_created += 1
+    db.flush()
+    return items_created
 
 
 def get_status_history(db: Session, tenant_id: int, item_id: int) -> list[StatusHistoryOut]:

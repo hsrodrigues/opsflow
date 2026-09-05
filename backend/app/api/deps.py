@@ -79,3 +79,20 @@ def get_current_tenant_id(user: User = Depends(get_current_user)) -> int:
     if user.tenant_id is None:
         raise ForbiddenError("Esta ação requer um usuário vinculado a uma empresa.")
     return user.tenant_id
+
+
+def require_platform_admin(user: User = Depends(get_current_user)) -> User:
+    """The mirror image of `get_current_tenant_id`: gate an endpoint to
+    `SUPER_ADMIN` only (seção 54) — a platform operator managing tenants/
+    licenses across companies, never a regular tenant user no matter their
+    permissions. `SUPER_ADMIN` is the only role with `tenant_id is None`
+    (`app/models/user.py`), which is what's actually checked — the role
+    check on top is belt-and-suspenders documentation of intent, since
+    nothing else can create a `tenant_id IS NULL` user through the API today.
+    """
+    if user.tenant_id is not None:
+        raise ForbiddenError("Esta ação é exclusiva de administradores de plataforma.")
+    role_codes = {role.code.value if hasattr(role.code, "value") else role.code for role in user.roles}
+    if "SUPER_ADMIN" not in role_codes:
+        raise ForbiddenError("Esta ação é exclusiva de administradores de plataforma.")
+    return user

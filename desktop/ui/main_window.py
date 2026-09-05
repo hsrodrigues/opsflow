@@ -23,10 +23,16 @@ from services.async_task import ApiWorker
 from ui.carriers_page import CarriersPage
 from ui.dashboard_page import DashboardPage
 from ui.drivers_page import DriversPage
+from ui.license_page import LicensePage
+from ui.notification_panel import NotificationBell
 from ui.occurrences_page import OccurrencesPage
 from ui.operations_page import OperationsPage
+from ui.products_page import ProductsPage
+from ui.reports_page import ReportsPage
 from ui.routes_page import RoutesPage
 from ui.schedules_page import SchedulesPage
+from ui.settings_page import SettingsPage
+from ui.users_page import UsersPage
 from ui.vehicles_page import VehiclesPage
 
 # Navegação agrupada por seção (padrão comum em ERPs: Visão Geral / Cadastros
@@ -41,6 +47,7 @@ _NAV_SECTIONS = [
         ("Motoristas", True, lambda self: DriversPage(self._api_client, self._session)),
         ("Transportadoras", True, lambda self: CarriersPage(self._api_client, self._session)),
         ("Rotas", True, lambda self: RoutesPage(self._api_client, self._session)),
+        ("Produtos", True, lambda self: ProductsPage(self._api_client, self._session)),
     ]),
     ("OPERAÇÃO", [
         ("Programação", True, lambda self: SchedulesPage(self._api_client, self._session)),
@@ -48,10 +55,12 @@ _NAV_SECTIONS = [
         ("Ocorrências", True, lambda self: OccurrencesPage(self._api_client, self._session)),
     ]),
     ("ANÁLISE", [
-        ("Relatórios", False, None),
+        ("Relatórios", True, lambda self: ReportsPage(self._api_client, self._session)),
     ]),
     ("SISTEMA", [
-        ("Configurações", False, None),
+        ("Usuários", True, lambda self: UsersPage(self._api_client, self._session)),
+        ("Licença", True, lambda self: LicensePage(self._api_client, self._session)),
+        ("Configurações", True, lambda self: SettingsPage(self._config, self._api_client, self._session)),
     ]),
 ]
 
@@ -106,6 +115,15 @@ class MainWindow(QWidget):
         self._health_timer.timeout.connect(self._poll_health)
         self._health_timer.start(_HEALTH_POLL_INTERVAL_MS)
         self._poll_health()
+
+        # Mesma cadência do indicador de conexão — os robôs em background
+        # (seção 41) podem gerar uma notificação a qualquer momento, então o
+        # contador de não lidas precisa se atualizar sozinho, sem o usuário
+        # precisar abrir o sino para descobrir que há algo novo.
+        self._notification_timer = QTimer(self)
+        self._notification_timer.timeout.connect(self._notification_bell.refresh_count)
+        self._notification_timer.start(_HEALTH_POLL_INTERVAL_MS)
+        self._notification_bell.refresh_count()
 
     # --- construção da UI ---
 
@@ -186,6 +204,10 @@ class MainWindow(QWidget):
         layout.addWidget(self._connection_label)
         layout.addSpacing(16)
 
+        self._notification_bell = NotificationBell(self._api_client, self._session)
+        layout.addWidget(self._notification_bell)
+        layout.addSpacing(10)
+
         theme_button = QPushButton("🌙", objectName="IconButton")
         theme_button.setToolTip("Alternar tema claro/escuro")
         theme_button.setFixedSize(32, 32)
@@ -241,9 +263,11 @@ class MainWindow(QWidget):
     def _toggle_theme(self) -> None:
         self._dark_mode = not self._dark_mode
         self._apply_theme_callback(dark=self._dark_mode)
-        # QSS não estiliza QtCharts — páginas com gráficos (ex. Dashboard)
-        # precisam redesenhá-los na cor certa; convenção: um método
-        # `apply_theme(dark=...)` na página, chamado aqui se existir.
+        # QSS não estiliza QtCharts nem o viewport de um QScrollArea dentro
+        # de uma janela translúcida (ver `notification_panel.py`) — quem
+        # precisa repintar na cor certa expõe um `apply_theme(dark=...)`,
+        # chamado aqui se existir.
+        self._notification_bell.apply_theme(dark=self._dark_mode)
         for index in self._page_indexes.values():
             page = self._stack.widget(index)
             if hasattr(page, "apply_theme"):

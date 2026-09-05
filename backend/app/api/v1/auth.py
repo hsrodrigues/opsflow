@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
-from app.schemas.auth import LoginRequest, LogoutRequest, RefreshRequest, TokenResponse, UserInfo
+from app.schemas.auth import LoginRequest, LogoutRequest, MyProfileUpdate, RefreshRequest, TokenResponse, UserInfo
 from app.services import auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -38,3 +38,10 @@ def logout(payload: LogoutRequest, request: Request, db: Session = Depends(get_d
 @router.get("/me", response_model=UserInfo)
 def me(current_user=Depends(get_current_user)) -> UserInfo:
     return auth_service.build_user_info(current_user)
+
+
+@router.patch("/me", response_model=UserInfo)
+def update_me(
+    payload: MyProfileUpdate, current_user=Depends(get_current_user), db: Session = Depends(get_db),
+) -> UserInfo:
+    return auth_service.update_own_profile(db, current_user, payload)

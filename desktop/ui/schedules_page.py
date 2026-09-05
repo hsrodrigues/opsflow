@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -17,10 +18,12 @@ from app.session import UserSession
 from services.api_client import ApiClient
 from services.async_task import ApiWorker
 from services.errors import ApiError
+from ui.duplicate_schedule_dialog import DuplicateScheduleDialog
 from ui.schedule_dialog import ScheduleItemDialog
 from ui.status_change_dialog import StatusChangeDialog
 from ui.theme import apply_shadow
 from ui.widgets import build_badge
+from utils.formatting import format_datetime_br
 
 _STATUS_FILTER_OPTIONS = [
     ("Todos os status", None), ("Programado", "PROGRAMADO"), ("Aguardando", "AGUARDANDO"),
@@ -47,6 +50,7 @@ class SchedulesPage(QWidget):
         self._carriers: list[dict] = []
         self._vehicles: list[dict] = []
         self._drivers: list[dict] = []
+        self._products: list[dict] = []
         self._worker: ApiWorker | None = None
 
         self._build_ui()
@@ -60,6 +64,9 @@ class SchedulesPage(QWidget):
         header = QHBoxLayout()
         header.addWidget(QLabel("Programação", objectName="PageTitle"))
         header.addStretch(1)
+        self._duplicate_button = QPushButton("Duplicar programação", objectName="SecondaryButton")
+        self._duplicate_button.clicked.connect(self._handle_duplicate_clicked)
+        header.addWidget(self._duplicate_button)
         self._new_button = QPushButton("+ Nova Programação", objectName="PrimaryButton")
         self._new_button.setEnabled(False)
         self._new_button.clicked.connect(self._handle_new_clicked)
@@ -155,6 +162,13 @@ class SchedulesPage(QWidget):
 
     def _handle_drivers_loaded(self, result: dict) -> None:
         self._drivers = result.get("items", [])
+        self._worker = ApiWorker(self._api_client.list_products, self._session.access_token, page_size=100)
+        self._worker.succeeded.connect(self._handle_products_loaded)
+        self._worker.failed.connect(lambda _exc: self._load_items())
+        self._worker.start()
+
+    def _handle_products_loaded(self, result: dict) -> None:
+        self._products = result.get("items", [])
         self._new_button.setEnabled(bool(self._routes))
         if not self._routes:
             self._show_status("Cadastre ao menos uma rota antes de criar programações.", is_error=True)
@@ -203,7 +217,7 @@ class SchedulesPage(QWidget):
             self._table.setItem(row, 0, route_item)
             self._table.setItem(row, 1, QTableWidgetItem(item.get("vehicle_plate") or "—"))
             self._table.setItem(row, 2, QTableWidgetItem(item.get("driver_name") or "—"))
-            scheduled_display = item["scheduled_at"].replace("T", " ")[:16]
+            scheduled_display = format_datetime_br(item["scheduled_at"])
             self._table.setItem(row, 3, QTableWidgetItem(scheduled_display))
             text, badge_class = _STATUS_DISPLAY.get(item["status"], (item["status"], "BadgeNeutral"))
             self._table.setCellWidget(row, 4, build_badge(text, badge_class))
@@ -229,6 +243,15 @@ class SchedulesPage(QWidget):
         edit_button.clicked.connect(lambda: self._handle_edit_clicked(item))
         row_layout.addWidget(status_button)
         row_layout.addWidget(edit_button)
+        # Só dá pra excluir enquanto ainda não virou uma operação de verdade
+        # (seção 21) — depois disso ela carrega histórico operacional e o
+        # caminho é cancelar via Status, não apagar (mesmo backend que já
+        # recusa a exclusão nesse caso, ver `schedule_service.py`).
+        if item["status"] == "PROGRAMADO":
+            delete_button = QPushButton("Excluir", objectName="DangerLinkButton")
+            delete_button.setCursor(Qt.CursorShape.PointingHandCursor)
+            delete_button.clicked.connect(lambda: self._handle_delete_clicked(item))
+            row_layout.addWidget(delete_button)
         row_layout.addStretch(1)
         return container
 
@@ -237,16 +260,24 @@ class SchedulesPage(QWidget):
     def _handle_new_clicked(self) -> None:
         dialog = ScheduleItemDialog(
             self._api_client, self._session.access_token, self._routes, self._carriers, self._vehicles,
-            self._drivers,
+            self._drivers, self._products,
         )
         if dialog.exec():
             self._show_status("Programação criada com sucesso.")
             self._load_items()
 
+    def _handle_duplicate_clicked(self) -> None:
+        dialog = DuplicateScheduleDialog(
+            self._api_client, self._session.access_token, source_date=self._date_filter.date(),
+        )
+        if dialog.exec():
+            self._show_status(f"{dialog.items_created} item(ns) duplicado(s) com sucesso.")
+            self._load_items()
+
     def _handle_edit_clicked(self, item: dict) -> None:
         dialog = ScheduleItemDialog(
             self._api_client, self._session.access_token, self._routes, self._carriers, self._vehicles,
-            self._drivers, item=item,
+            self._drivers, self._products, item=item,
         )
         if dialog.exec():
             self._show_status("Programação atualizada com sucesso.")
@@ -257,6 +288,25 @@ class SchedulesPage(QWidget):
         if dialog.exec():
             self._show_status("Status atualizado com sucesso.")
             self._load_items()
+
+    def _handle_delete_clicked(self, item: dict) -> None:
+        confirmation = QMessageBox.question(
+            self, "Excluir programação",
+            f"Tem certeza que deseja excluir a programação da rota {item['route_name']}?\n\n"
+            "Esta ação não pode ser desfeita.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if confirmation != QMessageBox.StandardButton.Yes:
+            return
+        worker = ApiWorker(self._api_client.delete_schedule_item, self._session.access_token, item["id"])
+        worker.succeeded.connect(lambda _r: self._handle_delete_succeeded())
+        worker.failed.connect(self._handle_load_failed)
+        worker.start()
+        self._delete_worker = worker
+
+    def _handle_delete_succeeded(self) -> None:
+        self._show_status("Programação excluída.")
+        self._load_items()
 
     def _show_status(self, message: str, *, is_error: bool = False) -> None:
         self._status_message.setObjectName("ErrorBanner" if is_error else "Muted")

@@ -5,14 +5,15 @@ is real data from `/api/v1/dashboard`.
 """
 from PySide6.QtCharts import QBarCategoryAxis, QBarSeries, QBarSet, QChart, QChartView, QValueAxis
 from PySide6.QtCore import QDate, Qt
-from PySide6.QtGui import QColor, QPainter
-from PySide6.QtWidgets import QDateEdit, QFrame, QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtWidgets import QDateEdit, QGridLayout, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from app.session import UserSession
 from services.api_client import ApiClient
 from services.async_task import ApiWorker
 from services.errors import ApiError
-from ui.theme import DARK, LIGHT, apply_shadow
+from ui.theme import DARK, LIGHT, make_scroll_area_transparent
+from ui.widgets import build_kpi_card
 
 _ROLE_LABELS = {
     "SUPER_ADMIN": "Administrador da Plataforma", "ADMIN_EMPRESA": "Administrador",
@@ -53,7 +54,23 @@ class DashboardPage(QWidget):
     # --- construção da UI ---
 
     def _build_ui(self) -> None:
-        layout = QVBoxLayout(self)
+        # A página é uma tela cheia (banner + 2 linhas de KPI + 3 gráficos de
+        # ~240px cada) — em janelas mais baixas isso passa da altura
+        # disponível. `self` vira só uma casca fina em volta de um
+        # QScrollArea; o conteúdo de verdade mora em `content`, que é o que
+        # de fato rola. Sem isso o rodapé do shell cobria os gráficos de
+        # baixo sem nenhum jeito de rolar até eles.
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        make_scroll_area_transparent(scroll)
+        content = QWidget()
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
+
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(16)
 
@@ -106,28 +123,35 @@ class DashboardPage(QWidget):
 
     def _build_kpi_cards(self) -> None:
         cards = [
-            ("operacoes_hoje", "Operações hoje"), ("concluidas", "Concluídas"),
-            ("em_andamento", "Em andamento"), ("atrasadas", "Atrasadas"), ("canceladas", "Canceladas"),
-            ("veiculos_ativos", "Veículos ativos"), ("ocorrencias", "Ocorrências"),
-            ("tempo_medio_minutos", "Tempo médio (min)"), ("taxa_conclusao_percentual", "Taxa de conclusão"),
+            ("operacoes_hoje", "📅", "IconChipInfo", "Operações hoje"),
+            ("concluidas", "✅", "IconChipSuccess", "Concluídas"),
+            ("em_andamento", "🚚", "IconChipInfo", "Em andamento"),
+            ("atrasadas", "⏱️", "IconChipDanger", "Atrasadas"),
+            ("canceladas", "✕", "IconChipNeutral", "Canceladas"),
+            ("veiculos_ativos", "🚛", "IconChipNeutral", "Veículos ativos"),
+            ("ocorrencias", "⚠️", "IconChipWarning", "Ocorrências"),
+            ("tempo_medio_minutos", "⏳", "IconChipNeutral", "Tempo médio (min)"),
+            ("taxa_conclusao_percentual", "📈", "IconChipSuccess", "Taxa de conclusão"),
         ]
-        for index, (key, label) in enumerate(cards):
-            card = QFrame(objectName="Card")
-            apply_shadow(card, blur=18, y_offset=4, alpha=18)
-            card_layout = QVBoxLayout(card)
-            card_layout.setContentsMargins(16, 14, 16, 14)
-            value_label = QLabel("—", objectName="CardValue")
+        for index, (key, glyph, variant, label) in enumerate(cards):
+            card, value_label = build_kpi_card(glyph, variant, label)
             self._card_labels[key] = value_label
-            card_layout.addWidget(value_label)
-            card_layout.addWidget(QLabel(label, objectName="CardLabel"))
             self._cards_grid.addWidget(card, index // 5, index % 5)
 
     def _build_chart_placeholder(self) -> QChartView:
         chart = QChart()
         chart.legend().hide()
+        chart.setBackgroundVisible(False)
         view = QChartView(chart)
         view.setRenderHint(QPainter.RenderHint.Antialiasing)
         view.setMinimumHeight(240)
+        # QChartView é um QGraphicsView — QSS não estiliza o fundo da cena, e
+        # sem isso ele cai no fundo nativo do Qt, que segue o tema do Windows
+        # (não o tema claro/escuro do app), aparecendo preto num Windows com
+        # modo escuro ligado mesmo com o app em tema claro. `_render_bar_chart`
+        # reaplica isso com a cor certa a cada carregamento/troca de tema; aqui
+        # é só o valor inicial (tema claro é o padrão de `_dark_mode`).
+        view.setBackgroundBrush(QColor(LIGHT.surface))
         return view
 
     def _populate_welcome_card(self) -> None:
@@ -195,6 +219,8 @@ class DashboardPage(QWidget):
     def _render_bar_chart(
         self, view: QChartView, title: str, points: list[dict], label_map: dict, palette,
     ) -> None:
+        view.setBackgroundBrush(QColor(palette.surface))
+
         chart = QChart()
         chart.setTitle(title)
         chart.legend().hide()
@@ -212,14 +238,21 @@ class DashboardPage(QWidget):
         series.append(bar_set)
         chart.addSeries(series)
 
+        grid_pen = QPen(QColor(palette.border))
+        axis_line_pen = QPen(QColor(palette.border_strong))
+
         axis_x = QBarCategoryAxis()
         axis_x.append(categories)
         axis_x.setLabelsColor(QColor(palette.text_muted))
+        axis_x.setLinePen(axis_line_pen)
+        axis_x.setGridLineVisible(False)
         chart.addAxis(axis_x, Qt.AlignmentFlag.AlignBottom)
         series.attachAxis(axis_x)
 
         axis_y = QValueAxis()
         axis_y.setLabelsColor(QColor(palette.text_muted))
+        axis_y.setLinePen(axis_line_pen)
+        axis_y.setGridLinePen(grid_pen)
         max_value = max((point["value"] for point in points), default=0)
         axis_y.setRange(0, max(1, max_value))
         chart.addAxis(axis_y, Qt.AlignmentFlag.AlignLeft)

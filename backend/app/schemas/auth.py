@@ -39,9 +39,22 @@ class UserInfo(BaseModel):
     id: int
     email: str
     full_name: str
+    phone: str | None = None
     tenant_id: int | None
     roles: list[str]
     permissions: list[str]
+
+
+class MyProfileUpdate(BaseModel):
+    """`PATCH /auth/me` — auto-atendimento (seção 26 "Configurações"):
+    qualquer usuário autenticado pode editar o próprio nome/telefone, sem
+    depender da permissão `users.manage` que só admins têm. Não inclui senha
+    de propósito — trocar senha continua uma ação exclusiva do admin da
+    empresa, na tela Usuários (nunca havia um fluxo de "esqueci minha senha"
+    self-service, e a decisão foi não criar um)."""
+
+    full_name: str = Field(min_length=1, max_length=200)
+    phone: str | None = Field(default=None, max_length=30)
 
 
 class TokenResponse(BaseModel):

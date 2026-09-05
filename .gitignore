@@ -26,6 +26,11 @@ env/
 logs/*.log
 logs/*.log.*
 
+# --- Backups do banco (app/jobs/backup_job.py) — dumps reais de clientes,
+# nunca versionados; ficam só no disco de quem roda o backend ---
+backend/backups/
+backups/
+
 # --- Tests / coverage ---
 .pytest_cache/
 .coverage
@@ -40,9 +45,9 @@ coverage.xml
 # --- Desktop build artifacts ---
 desktop/build/
 desktop/dist/
-*.spec
 
-# --- Installer output ---
+# --- Installer output --- (installer/opsflow.spec IS committed — it's the
+# build recipe, not an artifact; only its generated .exe/.iss output isn't)
 installer/*.exe
 
 # --- IDE / OS ---

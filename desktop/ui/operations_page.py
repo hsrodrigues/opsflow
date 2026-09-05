@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
-    QFrame,
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
@@ -19,7 +18,7 @@ from services.api_client import ApiClient
 from services.async_task import ApiWorker
 from services.errors import ApiError
 from ui.theme import apply_shadow
-from ui.widgets import build_badge
+from ui.widgets import build_badge, build_kpi_card
 
 _STATUS_DISPLAY = {
     "AGUARDANDO": ("🟡 Aguardando", "BadgeWarning"), "EM_FILA": ("🟡 Em fila", "BadgeWarning"),
@@ -70,9 +69,9 @@ class OperationsPage(QWidget):
 
         cards = QGridLayout()
         cards.setSpacing(16)
-        self._programadas_card = self._build_counter_card("Programadas")
-        self._em_operacao_card = self._build_counter_card("Em operação")
-        self._atrasadas_card = self._build_counter_card("Atrasadas")
+        self._programadas_card, self._programadas_value = build_kpi_card("🗓️", "IconChipInfo", "Programadas")
+        self._em_operacao_card, self._em_operacao_value = build_kpi_card("🚚", "IconChipSuccess", "Em operação")
+        self._atrasadas_card, self._atrasadas_value = build_kpi_card("⏱️", "IconChipDanger", "Atrasadas")
         cards.addWidget(self._programadas_card, 0, 0)
         cards.addWidget(self._em_operacao_card, 0, 1)
         cards.addWidget(self._atrasadas_card, 0, 2)
@@ -99,18 +98,6 @@ class OperationsPage(QWidget):
         apply_shadow(self._table, blur=20, y_offset=4, alpha=15)
         layout.addWidget(self._table, stretch=1)
 
-    @staticmethod
-    def _build_counter_card(label: str) -> QFrame:
-        card = QFrame(objectName="Card")
-        apply_shadow(card, blur=18, y_offset=4, alpha=18)
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(20, 18, 20, 18)
-        value_label = QLabel("—", objectName="CardValue")
-        card._value_label = value_label  # guarda a referência para atualização (ver _apply_summary)
-        card_layout.addWidget(value_label)
-        card_layout.addWidget(QLabel(label, objectName="CardLabel"))
-        return card
-
     # --- atualização ---
 
     def _refresh(self) -> None:
@@ -125,9 +112,9 @@ class OperationsPage(QWidget):
         self._list_worker.start()
 
     def _apply_summary(self, summary: dict) -> None:
-        self._programadas_card._value_label.setText(str(summary["programadas"]))
-        self._em_operacao_card._value_label.setText(str(summary["em_operacao"]))
-        self._atrasadas_card._value_label.setText(str(summary["atrasadas"]))
+        self._programadas_value.setText(str(summary["programadas"]))
+        self._em_operacao_value.setText(str(summary["em_operacao"]))
+        self._atrasadas_value.setText(str(summary["atrasadas"]))
         self._updated_label.setText(f"Atualizado às {datetime.now().strftime('%H:%M:%S')}")
 
     def _apply_operations(self, operations: list) -> None:

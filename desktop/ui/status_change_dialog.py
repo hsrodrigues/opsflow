@@ -8,7 +8,6 @@ also what turns the item into a live `Operation` the first time it leaves
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
-    QDialogButtonBox,
     QFormLayout,
     QLabel,
     QTextEdit,
@@ -18,6 +17,8 @@ from PySide6.QtWidgets import (
 from services.api_client import ApiClient
 from services.async_task import ApiWorker
 from services.errors import ApiError
+from ui.widgets import build_dialog_buttons, build_dialog_header
+from utils.formatting import format_datetime_br
 
 _STATUS_OPTIONS = ["PROGRAMADO", "AGUARDANDO", "EM_FILA", "EM_OPERACAO", "CONCLUIDO", "ATRASADO", "CANCELADO"]
 _STATUS_LABELS = {
@@ -43,6 +44,13 @@ class StatusChangeDialog(QDialog):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(28, 24, 28, 24)
+        layout.setSpacing(6)
+
+        layout.addWidget(build_dialog_header(
+            "🔄", "IconChipInfo", "Alterar status", self._item["route_name"],
+        ))
+        layout.addSpacing(18)
 
         self._error_label = QLabel("")
         self._error_label.setObjectName("ErrorBanner")
@@ -73,12 +81,9 @@ class StatusChangeDialog(QDialog):
         form.addRow("Observações", self._notes_input)
 
         layout.addLayout(form)
+        layout.addSpacing(8)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
-        buttons.button(QDialogButtonBox.StandardButton.Save).setText("Confirmar")
-        buttons.button(QDialogButtonBox.StandardButton.Save).setObjectName("PrimaryButton")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Cancelar")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setObjectName("SecondaryButton")
+        buttons = build_dialog_buttons("Confirmar")
         buttons.accepted.connect(self._handle_confirm_clicked)
         buttons.rejected.connect(self.reject)
         self._buttons = buttons
@@ -98,7 +103,7 @@ class StatusChangeDialog(QDialog):
             return
         lines = []
         for entry in history:
-            time_text = entry["changed_at"].replace("T", " ")[:16]
+            time_text = format_datetime_br(entry["changed_at"])
             label = _STATUS_LABELS.get(entry["new_status"], entry["new_status"])
             lines.append(f"{time_text}  →  {label}" + (f" ({entry['notes']})" if entry.get("notes") else ""))
         self._history_label.setText("\n".join(lines))

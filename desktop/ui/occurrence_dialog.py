@@ -4,7 +4,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDateTimeEdit,
     QDialog,
-    QDialogButtonBox,
     QFormLayout,
     QLabel,
     QTextEdit,
@@ -14,6 +13,7 @@ from PySide6.QtWidgets import (
 from services.api_client import ApiClient
 from services.async_task import ApiWorker
 from services.errors import ApiError
+from ui.widgets import build_dialog_buttons, build_dialog_header
 
 _TYPE_SUGGESTIONS = [
     "Atraso", "Quebra", "Acidente", "Falta de documentação", "Problema operacional",
@@ -47,6 +47,15 @@ class OccurrenceDialog(QDialog):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(28, 24, 28, 24)
+        layout.setSpacing(6)
+
+        layout.addWidget(build_dialog_header(
+            "⚠️", "IconChipWarning",
+            "Editar ocorrência" if self._occurrence else "Nova ocorrência",
+            "Registro do evento e vínculo com veículo/motorista",
+        ))
+        layout.addSpacing(18)
 
         self._error_label = QLabel("")
         self._error_label.setObjectName("ErrorBanner")
@@ -96,12 +105,9 @@ class OccurrenceDialog(QDialog):
         form.addRow("Descrição *", self._description_input)
 
         layout.addLayout(form)
+        layout.addSpacing(8)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
-        buttons.button(QDialogButtonBox.StandardButton.Save).setText("Salvar")
-        buttons.button(QDialogButtonBox.StandardButton.Save).setObjectName("PrimaryButton")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Cancelar")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setObjectName("SecondaryButton")
+        buttons = build_dialog_buttons("Salvar")
         buttons.accepted.connect(self._handle_save_clicked)
         buttons.rejected.connect(self.reject)
         self._buttons = buttons

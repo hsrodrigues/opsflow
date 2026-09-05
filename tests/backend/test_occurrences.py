@@ -75,3 +75,75 @@ def test_update_occurrence_status(auth_client):
 def test_occurrence_endpoints_require_authentication(client):
     response = client.get("/api/v1/occurrences")
     assert response.status_code == 401
+
+
+def test_accident_occurrence_auto_blocks_vehicle_and_notifies_admins(auth_client, db_session):
+    """A automação da seção 41: um acidente registrado contra um veículo
+    bloqueia esse veículo na mesma transação e notifica ADMIN_EMPRESA/
+    SUPERVISOR — sem precisar de nenhum robô em background, é síncrono."""
+    from app.models.notification import Notification
+    from app.models.user import User
+
+    client, headers, tenant = auth_client
+    vehicle = client.post("/api/v1/vehicles", headers=headers, json={"plate": "ACD1D01"}).json()
+    assert vehicle["status"] == "DISPONIVEL"
+
+    response = client.post(
+        "/api/v1/occurrences", headers=headers,
+        json={
+            "occurrence_type_name": "Acidente", "description": "Colisão traseira no pátio.",
+            "severity": "CRITICA", "occurred_at": "2026-09-10T09:00:00", "vehicle_id": vehicle["id"],
+        },
+    )
+    assert response.status_code == 201
+
+    updated_vehicle = client.get(f"/api/v1/vehicles/{vehicle['id']}", headers=headers).json()
+    assert updated_vehicle["status"] == "BLOQUEADO"
+
+    admin = db_session.query(User).filter(User.tenant_id == tenant.id).one()
+    notification = db_session.query(Notification).filter(
+        Notification.tenant_id == tenant.id, Notification.user_id == admin.id,
+        Notification.related_entity_type == "vehicle",
+    ).one_or_none()
+    assert notification is not None
+    assert vehicle["plate"] in notification.message
+
+
+def test_non_accident_occurrence_does_not_block_vehicle(auth_client):
+    client, headers, _tenant = auth_client
+    vehicle = client.post("/api/v1/vehicles", headers=headers, json={"plate": "NBL1D02"}).json()
+
+    client.post(
+        "/api/v1/occurrences", headers=headers,
+        json={
+            "occurrence_type_name": "Atraso", "description": "Trânsito intenso.", "severity": "BAIXA",
+            "occurred_at": "2026-09-10T09:00:00", "vehicle_id": vehicle["id"],
+        },
+    )
+
+    updated_vehicle = client.get(f"/api/v1/vehicles/{vehicle['id']}", headers=headers).json()
+    assert updated_vehicle["status"] != "BLOQUEADO"
+
+
+def test_accident_occurrence_does_not_reblock_already_blocked_vehicle(auth_client, db_session):
+    """Idempotente: um segundo acidente no mesmo veículo já bloqueado não
+    deve gerar uma segunda notificação de bloqueio."""
+    from app.models.notification import Notification
+
+    client, headers, tenant = auth_client
+    vehicle = client.post("/api/v1/vehicles", headers=headers, json={"plate": "DBL1D03"}).json()
+
+    for _ in range(2):
+        client.post(
+            "/api/v1/occurrences", headers=headers,
+            json={
+                "occurrence_type_name": "Acidente", "description": "Acidente.", "severity": "ALTA",
+                "occurred_at": "2026-09-10T09:00:00", "vehicle_id": vehicle["id"],
+            },
+        )
+
+    block_notifications = db_session.query(Notification).filter(
+        Notification.tenant_id == tenant.id, Notification.related_entity_type == "vehicle",
+        Notification.related_entity_id == vehicle["id"],
+    ).count()
+    assert block_notifications == 1

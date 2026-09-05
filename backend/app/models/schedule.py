@@ -46,6 +46,11 @@ class ScheduleItem(Base, TimestampMixin, TenantMixin, AuditMixin, SoftDeleteMixi
     carrier_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("carriers.id"), nullable=True)
     vehicle_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("vehicles.id"), nullable=True)
     driver_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("drivers.id"), nullable=True)
+    # `SET NULL` (não `CASCADE`): apagar um produto do catálogo não pode
+    # apagar o histórico de uma programação/operação já executada.
+    product_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("products.id", ondelete="SET NULL"), nullable=True
+    )
     scheduled_at: Mapped[datetime] = mapped_column(nullable=False)
     cargo_description: Mapped[str | None] = mapped_column(String(255), nullable=True)
     quantity: Mapped[float | None] = mapped_column(Integer, nullable=True)
@@ -59,6 +64,7 @@ class ScheduleItem(Base, TimestampMixin, TenantMixin, AuditMixin, SoftDeleteMixi
     carrier: Mapped["Carrier"] = relationship()
     vehicle: Mapped["Vehicle"] = relationship()
     driver: Mapped["Driver"] = relationship()
+    product: Mapped["Product"] = relationship()
     operation: Mapped["Operation"] = relationship(back_populates="schedule_item", uselist=False)
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid

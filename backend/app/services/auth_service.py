@@ -15,7 +15,7 @@ from app.models.enums import AuditAction, UserStatus
 from app.models.user import User
 from app.repositories.refresh_token_repository import RefreshTokenRepository
 from app.repositories.user_repository import get_user_by_email
-from app.schemas.auth import TokenResponse, UserInfo
+from app.schemas.auth import MyProfileUpdate, TokenResponse, UserInfo
 from app.services.audit_service import write_audit_log
 from app.services.license_service import build_license_info, get_latest_license
 
@@ -31,9 +31,21 @@ def build_user_info(user: User) -> UserInfo:
         {permission.code for role in user.roles for permission in role.permissions}
     )
     return UserInfo(
-        id=user.id, email=user.email, full_name=user.full_name, tenant_id=user.tenant_id,
+        id=user.id, email=user.email, full_name=user.full_name, phone=user.phone, tenant_id=user.tenant_id,
         roles=role_codes, permissions=permission_codes,
     )
+
+
+def update_own_profile(db: Session, user: User, payload: MyProfileUpdate) -> UserInfo:
+    """Auto-atendimento: qualquer usuário logado edita o próprio nome/telefone
+    (seção 26, tela Configurações) — sem exigir `users.manage`, já que aqui
+    ele só pode mexer no próprio registro (`user` vem de `get_current_user`,
+    nunca de um `user_id` na URL)."""
+    user.full_name = payload.full_name
+    user.phone = payload.phone
+    db.commit()
+    db.refresh(user)
+    return build_user_info(user)
 
 
 def login(

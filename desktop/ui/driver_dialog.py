@@ -1,10 +1,11 @@
 """Create/edit dialog for a driver (seção 10)."""
 from PySide6.QtCore import QDate
-from PySide6.QtWidgets import QComboBox, QDateEdit, QDialog, QDialogButtonBox, QFormLayout, QLabel, QLineEdit, QVBoxLayout
+from PySide6.QtWidgets import QComboBox, QDateEdit, QDialog, QFormLayout, QLabel, QLineEdit, QVBoxLayout
 
 from services.api_client import ApiClient
 from services.async_task import ApiWorker
 from services.errors import ApiError
+from ui.widgets import build_dialog_buttons, build_dialog_header
 from utils.masks import bind_live_format, format_cpf, format_phone
 
 _STATUS_OPTIONS = ["ATIVO", "INATIVO", "BLOQUEADO"]
@@ -31,6 +32,15 @@ class DriverDialog(QDialog):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(28, 24, 28, 24)
+        layout.setSpacing(6)
+
+        layout.addWidget(build_dialog_header(
+            "🪪", "IconChipInfo",
+            "Editar motorista" if self._driver else "Novo motorista",
+            "Documentos, CNH e contato do motorista",
+        ))
+        layout.addSpacing(18)
 
         self._error_label = QLabel("")
         self._error_label.setObjectName("ErrorBanner")
@@ -82,12 +92,9 @@ class DriverDialog(QDialog):
         form.addRow("Status", self._status_combo)
 
         layout.addLayout(form)
+        layout.addSpacing(8)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
-        buttons.button(QDialogButtonBox.StandardButton.Save).setText("Salvar")
-        buttons.button(QDialogButtonBox.StandardButton.Save).setObjectName("PrimaryButton")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Cancelar")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setObjectName("SecondaryButton")
+        buttons = build_dialog_buttons("Salvar")
         buttons.accepted.connect(self._handle_save_clicked)
         buttons.rejected.connect(self.reject)
         self._buttons = buttons

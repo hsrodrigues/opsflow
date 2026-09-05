@@ -9,11 +9,12 @@ and every creation endpoint that must reject "limite do plano atingido"
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import LicenseError
+from app.core.exceptions import LicenseError, NotFoundError
 from app.models.license import License
 from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.schemas.auth import LicenseInfo
+from app.schemas.license import LicenseSummary
 
 
 def get_latest_license(db: Session, tenant_id: int) -> License | None:
@@ -71,3 +72,19 @@ def enforce_user_limit(db: Session, tenant_id: int) -> None:
         return
     if _count_active(db, User, tenant_id) >= max_users:
         raise LicenseError(f"Limite de {max_users} usuários do seu plano atingido. Faça upgrade para adicionar mais.")
+
+
+def build_license_summary(db: Session, tenant_id: int) -> LicenseSummary:
+    license_ = get_latest_license(db, tenant_id)
+    if license_ is None:
+        raise NotFoundError("Nenhuma licença encontrada para esta empresa.")
+    plan = license_.plan
+    max_users, max_vehicles = get_effective_limits(license_)
+    status = license_.status.value if hasattr(license_.status, "value") else license_.status
+    return LicenseSummary(
+        plan_code=plan.code.value if plan and hasattr(plan.code, "value") else (plan.code if plan else ""),
+        plan_name=plan.name if plan else "—", status=status,
+        issued_at=license_.issued_at, expires_at=license_.expires_at,
+        max_users=max_users, max_vehicles=max_vehicles,
+        current_users=_count_active(db, User, tenant_id), current_vehicles=_count_active(db, Vehicle, tenant_id),
+    )

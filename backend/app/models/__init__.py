@@ -9,6 +9,7 @@ from app.models.api_key import ApiKey
 from app.models.attachment import Attachment
 from app.models.audit_log import AuditLog
 from app.models.base import AuditMixin, Base, SoftDeleteMixin, TenantMixin, TimestampMixin
+from app.models.archive import OccurrenceArchive, OperationArchive, ScheduleItemArchive, StatusHistoryArchive
 from app.models.carrier import Carrier
 from app.models.driver import Driver
 from app.models.integration_config import IntegrationConfig
@@ -19,6 +20,7 @@ from app.models.occurrence import Occurrence
 from app.models.occurrence_type import OccurrenceType
 from app.models.operation import Operation
 from app.models.plan import Plan
+from app.models.product import Product
 from app.models.role import Permission, Role, role_permissions
 from app.models.route import Route
 from app.models.schedule import Schedule, ScheduleItem
@@ -44,18 +46,23 @@ __all__ = [
     "Location",
     "Notification",
     "Occurrence",
+    "OccurrenceArchive",
     "OccurrenceType",
     "Operation",
+    "OperationArchive",
     "PasswordResetToken",
     "Permission",
     "Plan",
+    "Product",
     "RefreshToken",
     "Role",
     "Route",
     "Schedule",
     "ScheduleItem",
+    "ScheduleItemArchive",
     "SoftDeleteMixin",
     "StatusHistory",
+    "StatusHistoryArchive",
     "Subscription",
     "SystemSetting",
     "Tenant",

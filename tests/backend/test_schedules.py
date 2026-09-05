@@ -78,6 +78,29 @@ def test_create_schedule_item_rejects_route_from_another_tenant(auth_client, cli
     assert response.status_code == 422
 
 
+def test_delete_schedule_item_while_still_programado(auth_client, db_session):
+    client, headers, tenant = auth_client
+    route = make_route(db_session, tenant)
+    db_session.commit()
+    item_id = _create_item(client, headers, route.id).json()["id"]
+
+    response = client.delete(f"/api/v1/schedules/items/{item_id}", headers=headers)
+    assert response.status_code == 204
+    assert client.get(f"/api/v1/schedules/items/{item_id}", headers=headers).status_code == 404
+
+
+def test_cannot_delete_schedule_item_once_it_becomes_an_operation(auth_client, db_session):
+    client, headers, tenant = auth_client
+    route = make_route(db_session, tenant)
+    db_session.commit()
+    item_id = _create_item(client, headers, route.id).json()["id"]
+    client.post(f"/api/v1/schedules/items/{item_id}/status", headers=headers, json={"status": "EM_OPERACAO"})
+
+    response = client.delete(f"/api/v1/schedules/items/{item_id}", headers=headers)
+    assert response.status_code == 422
+    assert client.get(f"/api/v1/schedules/items/{item_id}", headers=headers).status_code == 200
+
+
 def test_list_schedule_items_filters_by_date(auth_client, db_session):
     client, headers, tenant = auth_client
     route = make_route(db_session, tenant)
@@ -87,3 +110,58 @@ def test_list_schedule_items_filters_by_date(auth_client, db_session):
 
     response = client.get("/api/v1/schedules/items?schedule_date=2026-09-10", headers=headers)
     assert response.json()["meta"]["total"] == 1
+
+
+def test_duplicate_schedule_clones_items_to_the_target_date(auth_client, db_session):
+    client, headers, tenant = auth_client
+    route = make_route(db_session, tenant)
+    db_session.commit()
+    _create_item(client, headers, route.id, schedule_date="2026-09-10")
+    second_item = _create_item(client, headers, route.id, schedule_date="2026-09-10").json()
+    # Cancelado não deve ser duplicado.
+    client.post(
+        f"/api/v1/schedules/items/{second_item['id']}/status", headers=headers, json={"status": "CANCELADO"},
+    )
+
+    response = client.post(
+        "/api/v1/schedules/duplicate", headers=headers,
+        json={"source_date": "2026-09-10", "target_date": "2026-09-17"},
+    )
+    assert response.status_code == 200
+    assert response.json()["items_created"] == 1
+
+    cloned = client.get("/api/v1/schedules/items?schedule_date=2026-09-17", headers=headers).json()
+    assert cloned["meta"]["total"] == 1
+    assert cloned["items"][0]["status"] == "PROGRAMADO"
+    assert cloned["items"][0]["scheduled_at"].startswith("2026-09-17")
+
+
+def test_duplicate_schedule_rejects_same_source_and_target_date(auth_client, db_session):
+    client, headers, tenant = auth_client
+    route = make_route(db_session, tenant)
+    db_session.commit()
+    _create_item(client, headers, route.id, schedule_date="2026-09-10")
+
+    response = client.post(
+        "/api/v1/schedules/duplicate", headers=headers,
+        json={"source_date": "2026-09-10", "target_date": "2026-09-10"},
+    )
+    assert response.status_code == 422
+
+
+def test_duplicate_schedule_requires_schedules_manage_permission(client, db_session):
+    from tests.backend.factories import make_user
+
+    tenant = make_tenant(db_session)
+    make_user(db_session, tenant, email="viewer@dup-schedule.com", role_code="VISUALIZADOR")
+    db_session.commit()
+    login = client.post(
+        "/api/v1/auth/login", json={"email": "viewer@dup-schedule.com", "password": "Sup3rSecret!"}
+    )
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    response = client.post(
+        "/api/v1/schedules/duplicate", headers=headers,
+        json={"source_date": "2026-09-10", "target_date": "2026-09-17"},
+    )
+    assert response.status_code == 403

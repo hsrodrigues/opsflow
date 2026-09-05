@@ -10,6 +10,8 @@ from app.models.enums import ScheduleStatus
 from app.models.user import User
 from app.schemas.common import Page, PageParams
 from app.schemas.schedule import (
+    DuplicateScheduleRequest,
+    DuplicateScheduleResult,
     ScheduleItemCreate,
     ScheduleItemOut,
     ScheduleItemUpdate,
@@ -68,6 +70,14 @@ def update_schedule_item(
     return schedule_item_to_out(item)
 
 
+@router.delete("/items/{item_id}", status_code=204)
+def delete_schedule_item(
+    item_id: int, request: Request, tenant_id: int = Depends(get_current_tenant_id),
+    user: User = Depends(require_permission("schedules.manage")), db: Session = Depends(get_db),
+) -> None:
+    schedule_service.delete_schedule_item(db, tenant_id, user, item_id, _client_ip(request))
+
+
 @router.post("/items/{item_id}/status", response_model=ScheduleItemOut)
 def change_schedule_item_status(
     item_id: int, payload: StatusChangeRequest, request: Request, tenant_id: int = Depends(get_current_tenant_id),
@@ -85,3 +95,14 @@ def get_schedule_item_history(
     _user: User = Depends(require_permission("schedules.view")), db: Session = Depends(get_db),
 ) -> list[StatusHistoryOut]:
     return schedule_service.get_status_history(db, tenant_id, item_id)
+
+
+@router.post("/duplicate", response_model=DuplicateScheduleResult)
+def duplicate_schedule(
+    payload: DuplicateScheduleRequest, request: Request, tenant_id: int = Depends(get_current_tenant_id),
+    user: User = Depends(require_permission("schedules.manage")), db: Session = Depends(get_db),
+) -> DuplicateScheduleResult:
+    items_created = schedule_service.duplicate_schedule_day(
+        db, tenant_id, user, payload.source_date, payload.target_date, _client_ip(request),
+    )
+    return DuplicateScheduleResult(items_created=items_created)

@@ -18,6 +18,7 @@ from app.session import UserSession  # noqa: E402
 from services.api_client import ApiClient  # noqa: E402
 from ui.login_window import LoginWindow  # noqa: E402
 from ui.main_window import MainWindow  # noqa: E402
+from ui.platform_window import PlatformWindow  # noqa: E402
 from ui.theme import apply_theme  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s")
@@ -40,7 +41,7 @@ class AppController:
         self._session = UserSession()
         self._dark_mode = False
         self.login_window: LoginWindow | None = None
-        self.main_window: MainWindow | None = None
+        self.main_window: MainWindow | PlatformWindow | None = None
 
         apply_theme(self._app, dark=self._dark_mode)
         self._show_login()
@@ -51,18 +52,25 @@ class AppController:
 
     def _show_login(self) -> None:
         self.main_window = None
-        self.login_window = LoginWindow(self._config, self._api_client, self._session, self._handle_login_success)
-        self.login_window.show()
+        self.login_window = LoginWindow(
+            self._config, self._api_client, self._session, self._handle_login_success, self._apply_theme,
+        )
+        self.login_window.showMaximized()
 
     def _handle_login_success(self) -> None:
         logger.info("Login bem-sucedido: user_id=%s tenant_id=%s", self._session.user_id, self._session.tenant_id)
         if self.login_window is not None:
             self.login_window.close()
             self.login_window = None
-        self.main_window = MainWindow(
+        # `tenant_id is None` só acontece pra SUPER_ADMIN (seção 54) — um
+        # usuário de plataforma, não de uma empresa cliente. O shell normal
+        # (sidebar de cadastros/operação) não faz sentido pra esse papel, daí
+        # a janela diferente em vez de mostrar telas que dariam 403 em tudo.
+        window_class = PlatformWindow if self._session.tenant_id is None else MainWindow
+        self.main_window = window_class(
             self._config, self._api_client, self._session, self._handle_logout, self._apply_theme,
         )
-        self.main_window.show()
+        self.main_window.showMaximized()
 
     def _handle_logout(self) -> None:
         logger.info("Logout: user_id=%s", self._session.user_id)

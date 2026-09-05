@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -19,6 +20,7 @@ from services.errors import ApiError
 from ui.occurrence_dialog import OccurrenceDialog
 from ui.theme import apply_shadow
 from ui.widgets import build_badge
+from utils.formatting import format_datetime_br
 
 _SEVERITY_FILTER_OPTIONS = [
     ("Todas as severidades", None), ("Crítica", "CRITICA"), ("Alta", "ALTA"), ("Média", "MEDIA"), ("Baixa", "BAIXA"),
@@ -177,7 +179,7 @@ class OccurrencesPage(QWidget):
         self._table.setRowCount(0)
         for row, occurrence in enumerate(items):
             self._table.insertRow(row)
-            when = occurrence["occurred_at"].replace("T", " ")[:16]
+            when = format_datetime_br(occurrence["occurred_at"])
             self._table.setItem(row, 0, QTableWidgetItem(when))
             type_item = QTableWidgetItem(occurrence["occurrence_type_name"])
             type_font = type_item.font()
@@ -208,6 +210,14 @@ class OccurrencesPage(QWidget):
         edit_button.setCursor(Qt.CursorShape.PointingHandCursor)
         edit_button.clicked.connect(lambda: self._handle_edit_clicked(occurrence))
         row_layout.addWidget(edit_button)
+        # Ocorrência é registro de incidente — nunca se exclui de fato (perderia
+        # o histórico/auditoria), então a ação rápida equivalente ao "Excluir"
+        # das outras telas é cancelar (já é um status válido, seção 14).
+        if occurrence["status"] != "CANCELADA":
+            cancel_button = QPushButton("Cancelar", objectName="DangerLinkButton")
+            cancel_button.setCursor(Qt.CursorShape.PointingHandCursor)
+            cancel_button.clicked.connect(lambda: self._handle_cancel_clicked(occurrence))
+            row_layout.addWidget(cancel_button)
         row_layout.addStretch(1)
         return container
 
@@ -224,6 +234,27 @@ class OccurrencesPage(QWidget):
         if dialog.exec():
             self._show_status("Ocorrência atualizada com sucesso.")
             self._load_occurrences()
+
+    def _handle_cancel_clicked(self, occurrence: dict) -> None:
+        confirmation = QMessageBox.question(
+            self, "Cancelar ocorrência",
+            f"Tem certeza que deseja cancelar a ocorrência \"{occurrence['occurrence_type_name']}\"?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if confirmation != QMessageBox.StandardButton.Yes:
+            return
+
+        worker = ApiWorker(
+            self._api_client.update_occurrence, self._session.access_token, occurrence["id"], {"status": "CANCELADA"},
+        )
+        worker.succeeded.connect(lambda _r: self._handle_cancel_succeeded())
+        worker.failed.connect(self._handle_load_failed)
+        worker.start()
+        self._cancel_worker = worker
+
+    def _handle_cancel_succeeded(self) -> None:
+        self._show_status("Ocorrência cancelada.")
+        self._load_occurrences()
 
     def _show_status(self, message: str, *, is_error: bool = False) -> None:
         self._status_message.setObjectName("ErrorBanner" if is_error else "Muted")

@@ -60,6 +60,27 @@ class RouteStatus(str, enum.Enum):
     INATIVA = "INATIVA"
 
 
+class ProductStatus(str, enum.Enum):
+    ATIVO = "ATIVO"
+    INATIVO = "INATIVO"
+
+
+class UnitOfMeasure(str, enum.Enum):
+    """A programação's `quantity` used to be a bare number with no declared
+    unit anywhere in the UI — this is what makes it unambiguous: every
+    `Product` declares its own unit, shown next to the quantity field once
+    a product is selected.
+    """
+
+    UNIDADE = "UNIDADE"
+    KG = "KG"
+    TONELADA = "TONELADA"
+    LITRO = "LITRO"
+    CAIXA = "CAIXA"
+    PALETE = "PALETE"
+    METRO_CUBICO = "METRO_CUBICO"
+
+
 class ScheduleStatus(str, enum.Enum):
     PROGRAMADO = "PROGRAMADO"
     AGUARDANDO = "AGUARDANDO"
@@ -100,3 +121,6 @@ class AuditAction(str, enum.Enum):
     EXPORT = "EXPORT"
     IMPORT = "IMPORT"
     STATUS_CHANGE = "STATUS_CHANGE"
+    BACKUP = "BACKUP"
+    RESTORE = "RESTORE"
+    ARCHIVE = "ARCHIVE"

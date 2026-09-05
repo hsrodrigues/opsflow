@@ -4,11 +4,10 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDateTimeEdit,
     QDialog,
-    QDialogButtonBox,
+    QDoubleSpinBox,
     QFormLayout,
     QLabel,
     QLineEdit,
-    QSpinBox,
     QTextEdit,
     QVBoxLayout,
 )
@@ -16,9 +15,13 @@ from PySide6.QtWidgets import (
 from services.api_client import ApiClient
 from services.async_task import ApiWorker
 from services.errors import ApiError
+from ui.widgets import build_dialog_buttons, build_dialog_header
 
 _SHIFT_OPTIONS = ["MANHA", "TARDE", "NOITE"]
 _SHIFT_LABELS = {"MANHA": "Manhã", "TARDE": "Tarde", "NOITE": "Noite"}
+_UNIT_LABELS = {
+    "UNIDADE": "un", "KG": "kg", "TONELADA": "t", "LITRO": "L", "CAIXA": "cx", "PALETE": "pl", "METRO_CUBICO": "m³",
+}
 
 
 class ScheduleItemDialog(QDialog):
@@ -30,7 +33,7 @@ class ScheduleItemDialog(QDialog):
 
     def __init__(
         self, api_client: ApiClient, access_token: str, routes: list[dict], carriers: list[dict],
-        vehicles: list[dict], drivers: list[dict], item: dict | None = None,
+        vehicles: list[dict], drivers: list[dict], products: list[dict], item: dict | None = None,
     ) -> None:
         super().__init__()
         self._api_client = api_client
@@ -39,6 +42,7 @@ class ScheduleItemDialog(QDialog):
         self._carriers = carriers
         self._vehicles = vehicles
         self._drivers = drivers
+        self._products = products
         self._item = item
         self._worker: ApiWorker | None = None
         self.saved_item: dict | None = None
@@ -51,6 +55,15 @@ class ScheduleItemDialog(QDialog):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(28, 24, 28, 24)
+        layout.setSpacing(6)
+
+        layout.addWidget(build_dialog_header(
+            "🗓️", "IconChipInfo",
+            "Editar programação" if self._item else "Nova programação",
+            "Rota, turno, veículo e motorista da operação",
+        ))
+        layout.addSpacing(18)
 
         self._error_label = QLabel("")
         self._error_label.setObjectName("ErrorBanner")
@@ -95,11 +108,24 @@ class ScheduleItemDialog(QDialog):
             self._driver_combo.addItem(driver["full_name"], driver["id"])
         form.addRow("Motorista", self._driver_combo)
 
-        self._cargo_input = QLineEdit()
-        form.addRow("Carga", self._cargo_input)
+        # O produto é opcional e é o que dá significado à quantidade — sem
+        # ele, "200" não diz se são 200 unidades, 200 kg ou 200 caixas. Ao
+        # escolher um produto, a unidade dele aparece sozinha como sufixo
+        # do campo de quantidade (ver `_handle_product_changed`).
+        self._product_combo = QComboBox()
+        self._product_combo.addItem("— Sem produto —", None)
+        for product in self._products:
+            self._product_combo.addItem(product["name"], product["id"])
+        self._product_combo.currentIndexChanged.connect(self._handle_product_changed)
+        form.addRow("Produto", self._product_combo)
 
-        self._quantity_input = QSpinBox()
+        self._cargo_input = QLineEdit()
+        self._cargo_input.setPlaceholderText("Detalhe livre da carga (opcional)")
+        form.addRow("Carga (detalhes)", self._cargo_input)
+
+        self._quantity_input = QDoubleSpinBox()
         self._quantity_input.setRange(0, 1_000_000)
+        self._quantity_input.setDecimals(2)
         form.addRow("Quantidade", self._quantity_input)
 
         self._notes_input = QTextEdit()
@@ -107,12 +133,9 @@ class ScheduleItemDialog(QDialog):
         form.addRow("Observações", self._notes_input)
 
         layout.addLayout(form)
+        layout.addSpacing(8)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
-        buttons.button(QDialogButtonBox.StandardButton.Save).setText("Salvar")
-        buttons.button(QDialogButtonBox.StandardButton.Save).setObjectName("PrimaryButton")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Cancelar")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setObjectName("SecondaryButton")
+        buttons = build_dialog_buttons("Salvar")
         buttons.accepted.connect(self._handle_save_clicked)
         buttons.rejected.connect(self.reject)
         self._buttons = buttons
@@ -138,14 +161,25 @@ class ScheduleItemDialog(QDialog):
             index = self._driver_combo.findText(item["driver_name"])
             if index >= 0:
                 self._driver_combo.setCurrentIndex(index)
+        if item.get("product_name"):
+            index = self._product_combo.findText(item["product_name"])
+            if index >= 0:
+                self._product_combo.setCurrentIndex(index)
+        self._handle_product_changed()
         self._cargo_input.setText(item.get("cargo_description") or "")
-        self._quantity_input.setValue(int(item.get("quantity") or 0))
+        self._quantity_input.setValue(item.get("quantity") or 0)
         self._notes_input.setPlainText(item.get("notes") or "")
         # Só se altera dados de planejamento pré-execução: mudar rota/veículo já em operação é feito
         # de outro jeito (esta tela não decide isso, só desabilita para não confundir o usuário aqui).
         is_editable = item["status"] == "PROGRAMADO"
         for widget in (self._route_combo, self._carrier_combo, self._vehicle_combo, self._driver_combo):
             widget.setEnabled(is_editable)
+
+    def _handle_product_changed(self) -> None:
+        product_id = self._product_combo.currentData()
+        product = next((p for p in self._products if p["id"] == product_id), None)
+        unit = _UNIT_LABELS.get(product["unit_of_measure"], "") if product else ""
+        self._quantity_input.setSuffix(f" {unit}" if unit else "")
 
     def _handle_save_clicked(self) -> None:
         if self._route_combo.count() == 0:
@@ -158,6 +192,7 @@ class ScheduleItemDialog(QDialog):
             "carrier_id": self._carrier_combo.currentData(),
             "vehicle_id": self._vehicle_combo.currentData(),
             "driver_id": self._driver_combo.currentData(),
+            "product_id": self._product_combo.currentData(),
             "scheduled_at": scheduled_dt.toString("yyyy-MM-ddTHH:mm:ss"),
             "cargo_description": self._cargo_input.text().strip() or None,
             "quantity": self._quantity_input.value() or None,

@@ -79,6 +79,18 @@ class Settings(BaseSettings):
     delay_detection_interval_minutes: int = 5
     cnh_alert_interval_hours: int = 24
     license_expiration_interval_minutes: int = 60
+    stale_operations_interval_minutes: int = 60
+    stale_operation_hours: int = 24
+
+    # --- Backup do banco (app/jobs/backup_job.py) ---
+    backup_dir: str = "backups"
+    backup_interval_hours: int = 24
+    backup_retention_count: int = 14
+    # Só necessário no Windows quando `mysqldump`/`mysql` não estão no PATH
+    # (instalação padrão do MySQL Installer não adiciona ao PATH do sistema).
+    # Em Docker/Linux, deixe em branco — os binários já estão no PATH do
+    # container.
+    mysql_bin_dir: str | None = None
 
 
 @lru_cache

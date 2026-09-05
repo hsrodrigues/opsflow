@@ -2,7 +2,6 @@
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
-    QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
     QLabel,
@@ -14,6 +13,7 @@ from PySide6.QtWidgets import (
 from services.api_client import ApiClient
 from services.async_task import ApiWorker
 from services.errors import ApiError
+from ui.widgets import build_dialog_buttons, build_dialog_header
 
 _STATUS_OPTIONS = ["DISPONIVEL", "EM_OPERACAO", "EM_MANUTENCAO", "INATIVO", "BLOQUEADO"]
 
@@ -42,6 +42,15 @@ class VehicleDialog(QDialog):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(28, 24, 28, 24)
+        layout.setSpacing(6)
+
+        layout.addWidget(build_dialog_header(
+            "🚛", "IconChipInfo",
+            "Editar veículo" if self._vehicle else "Novo veículo",
+            "Dados do veículo e vínculo com a transportadora",
+        ))
+        layout.addSpacing(18)
 
         self._error_label = QLabel("")
         self._error_label.setObjectName("ErrorBanner")
@@ -85,12 +94,9 @@ class VehicleDialog(QDialog):
         form.addRow("Status", self._status_combo)
 
         layout.addLayout(form)
+        layout.addSpacing(8)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
-        buttons.button(QDialogButtonBox.StandardButton.Save).setText("Salvar")
-        buttons.button(QDialogButtonBox.StandardButton.Save).setObjectName("PrimaryButton")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Cancelar")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setObjectName("SecondaryButton")
+        buttons = build_dialog_buttons("Salvar")
         buttons.accepted.connect(self._handle_save_clicked)
         buttons.rejected.connect(self.reject)
         self._buttons = buttons
