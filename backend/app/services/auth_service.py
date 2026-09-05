@@ -30,9 +30,15 @@ def build_user_info(user: User) -> UserInfo:
     permission_codes = sorted(
         {permission.code for role in user.roles for permission in role.permissions}
     )
+    # Nome fantasia se a empresa tiver um cadastrado, senão a razão social —
+    # o que aparecer aqui é só pra exibição (barra de status do desktop),
+    # nunca usado pra identificar a empresa (isso é sempre `tenant_id`).
+    tenant_name = None
+    if user.tenant_id is not None and user.tenant is not None:
+        tenant_name = user.tenant.trade_name or user.tenant.legal_name
     return UserInfo(
         id=user.id, email=user.email, full_name=user.full_name, phone=user.phone, tenant_id=user.tenant_id,
-        roles=role_codes, permissions=permission_codes,
+        tenant_name=tenant_name, roles=role_codes, permissions=permission_codes,
     )
 
 

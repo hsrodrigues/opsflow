@@ -19,6 +19,7 @@ class UserSession:
     full_name: str | None = None
     phone: str | None = None
     tenant_id: int | None = None
+    tenant_name: str | None = None
     roles: list[str] = field(default_factory=list)
     permissions: list[str] = field(default_factory=list)
     license_status: str | None = None

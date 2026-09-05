@@ -127,6 +127,37 @@ def test_me_endpoint_requires_a_valid_bearer_token(client, db_session):
     assert authenticated.json()["email"] == "me@empresa-teste.com"
 
 
+def test_login_includes_the_real_company_name(client, db_session):
+    """A barra de status do desktop mostrava só "Empresa #{id}" — nunca o
+    nome de verdade da empresa, porque a resposta de login nunca o incluía
+    (bug real reportado pelo usuário)."""
+    tenant = make_tenant(db_session, legal_name="Transportes Horizonte Ltda")
+    make_user(db_session, tenant, email="nome@empresa-teste.com", password="Sup3rSecret!")
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/auth/login", json={"email": "nome@empresa-teste.com", "password": "Sup3rSecret!"}
+    )
+    assert response.json()["user"]["tenant_name"] == "Transportes Horizonte Ltda"
+
+
+def test_super_admin_has_no_tenant_name(client, db_session):
+    from app.core.security import hash_password
+    from app.models.role import Role
+    from app.models.user import User
+
+    role = db_session.query(Role).filter(Role.code == "SUPER_ADMIN").one()
+    user = User(tenant_id=None, email="plataforma-teste@opsflow.local", full_name="X", password_hash=hash_password("Sup3rSecret!"))
+    user.roles.append(role)
+    db_session.add(user)
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/auth/login", json={"email": "plataforma-teste@opsflow.local", "password": "Sup3rSecret!"}
+    )
+    assert response.json()["user"]["tenant_name"] is None
+
+
 def test_any_role_can_update_own_profile_without_users_manage_permission(client, db_session):
     """Seção 26 (Configurações): editar o próprio nome/telefone é
     self-service pra qualquer papel — inclusive VISUALIZADOR, que não tem a

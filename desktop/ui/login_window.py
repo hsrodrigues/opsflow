@@ -311,6 +311,7 @@ class LoginWindow(QWidget):
         self._session.full_name = user["full_name"]
         self._session.phone = user.get("phone")
         self._session.tenant_id = user["tenant_id"]
+        self._session.tenant_name = user.get("tenant_name")
         self._session.roles = user["roles"]
         self._session.permissions = user["permissions"]
         if license_:

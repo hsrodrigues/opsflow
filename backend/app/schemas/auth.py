@@ -41,6 +41,11 @@ class UserInfo(BaseModel):
     full_name: str
     phone: str | None = None
     tenant_id: int | None
+    # `None` pra um SUPER_ADMIN (sem tenant) — o desktop mostra "Plataforma"
+    # nesse caso. Sem isso, a barra de status só tinha o `tenant_id`
+    # numérico pra exibir ("Empresa #1"), nunca o nome de verdade da
+    # empresa — bug real reportado pelo usuário.
+    tenant_name: str | None = None
     roles: list[str]
     permissions: list[str]
 

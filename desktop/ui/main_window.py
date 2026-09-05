@@ -239,7 +239,9 @@ class MainWindow(QWidget):
         layout.setContentsMargins(24, 0, 24, 0)
         layout.addWidget(QLabel(f"OpsFlow {self._config.app_version}", objectName="Muted"))
         layout.addStretch(1)
-        tenant_label = QLabel(f"Empresa #{self._session.tenant_id}" if self._session.tenant_id else "Plataforma")
+        tenant_label = QLabel(
+            self._session.tenant_name or (f"Empresa #{self._session.tenant_id}" if self._session.tenant_id else "Plataforma")
+        )
         tenant_label.setObjectName("Muted")
         layout.addWidget(tenant_label)
         return bar
