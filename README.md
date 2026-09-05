@@ -144,6 +144,14 @@ uvicorn app.main:app --app-dir backend --reload
 python desktop/main.py
 ```
 
+### Sincronização automática com o GitHub (Windows)
+
+Para iniciar o sincronizador no login do Windows, dê dois cliques em
+`Configurar Sync Automatico.bat`. Ele observa alterações no projeto, aguarda
+30 segundos sem novas alterações, cria um commit e envia para `origin/master`.
+Conflitos de rebase não são forçados; ficam registrados em
+`logs/auto-sync.log` para resolução manual.
+
 ## 🐳 Docker
 
 ```bash

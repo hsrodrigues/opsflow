@@ -25,6 +25,7 @@ env/
 # --- Logs ---
 logs/*.log
 logs/*.log.*
+logs/auto-sync.log
 
 # --- Backups do banco (app/jobs/backup_job.py) — dumps reais de clientes,
 # nunca versionados; ficam só no disco de quem roda o backend ---
