@@ -147,3 +147,82 @@ def test_accident_occurrence_does_not_reblock_already_blocked_vehicle(auth_clien
         Notification.related_entity_id == vehicle["id"],
     ).count()
     assert block_notifications == 1
+
+
+def test_critical_occurrence_auto_blocks_driver_and_notifies_admins(auth_client, db_session):
+    """Pedido explícito do cliente: "bloquear motorista caso a ocorrência
+    seja muito severa" — mesmo padrão do bloqueio automático de veículo em
+    acidente, síncrono, mesma transação."""
+    from app.models.notification import Notification
+    from app.models.user import User
+
+    client, headers, tenant = auth_client
+    driver = client.post(
+        "/api/v1/drivers", headers=headers, json={"full_name": "Motorista Crítico", "cpf": "111.222.333-44"},
+    ).json()
+    assert driver["status"] == "ATIVO"
+
+    response = client.post(
+        "/api/v1/occurrences", headers=headers,
+        json={
+            "occurrence_type_name": "Direção perigosa", "description": "Ultrapassagem em local proibido.",
+            "severity": "CRITICA", "occurred_at": "2026-09-10T09:00:00", "driver_id": driver["id"],
+        },
+    )
+    assert response.status_code == 201
+
+    updated_driver = client.get(f"/api/v1/drivers/{driver['id']}", headers=headers).json()
+    assert updated_driver["status"] == "BLOQUEADO"
+
+    admin = db_session.query(User).filter(User.tenant_id == tenant.id).one()
+    notification = db_session.query(Notification).filter(
+        Notification.tenant_id == tenant.id, Notification.user_id == admin.id,
+        Notification.related_entity_type == "driver",
+    ).one_or_none()
+    assert notification is not None
+    assert driver["full_name"] in notification.message
+
+
+def test_non_critical_occurrence_does_not_block_driver(auth_client):
+    client, headers, _tenant = auth_client
+    driver = client.post(
+        "/api/v1/drivers", headers=headers, json={"full_name": "Motorista Tranquilo", "cpf": "555.666.777-88"},
+    ).json()
+
+    client.post(
+        "/api/v1/occurrences", headers=headers,
+        json={
+            "occurrence_type_name": "Atraso", "description": "Trânsito intenso.", "severity": "ALTA",
+            "occurred_at": "2026-09-10T09:00:00", "driver_id": driver["id"],
+        },
+    )
+
+    updated_driver = client.get(f"/api/v1/drivers/{driver['id']}", headers=headers).json()
+    assert updated_driver["status"] != "BLOQUEADO"
+
+
+def test_critical_occurrence_does_not_reblock_already_blocked_driver(auth_client, db_session):
+    """Idempotente, mesmo raciocínio do veículo: uma segunda ocorrência
+    crítica contra o mesmo motorista já bloqueado não gera uma segunda
+    notificação de bloqueio."""
+    from app.models.notification import Notification
+
+    client, headers, tenant = auth_client
+    driver = client.post(
+        "/api/v1/drivers", headers=headers, json={"full_name": "Motorista Reincidente", "cpf": "999.888.777-66"},
+    ).json()
+
+    for _ in range(2):
+        client.post(
+            "/api/v1/occurrences", headers=headers,
+            json={
+                "occurrence_type_name": "Direção perigosa", "description": "Ocorrência grave.",
+                "severity": "CRITICA", "occurred_at": "2026-09-10T09:00:00", "driver_id": driver["id"],
+            },
+        )
+
+    block_notifications = db_session.query(Notification).filter(
+        Notification.tenant_id == tenant.id, Notification.related_entity_type == "driver",
+        Notification.related_entity_id == driver["id"],
+    ).count()
+    assert block_notifications == 1

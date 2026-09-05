@@ -1,17 +1,20 @@
 """Occurrence service — business rules for ocorrências (seção 14).
 
-Also owns one piece of automation (seção 41-style, mesma família dos robôs
-de `app/jobs/`, só que disparada na hora em vez de em varredura periódica):
-um acidente registrado contra um veículo bloqueia esse veículo na mesma
-transação, porque ninguém deveria precisar lembrar de fazer isso manualmente
-depois de um acidente.
+Also owns duas automações (seção 41-style, mesma família dos robôs de
+`app/jobs/`, só que disparadas na hora em vez de em varredura periódica),
+sempre na MESMA transação da criação da ocorrência — nunca uma ocorrência
+registrada sem o bloqueio correspondente, ou vice-versa:
+- um acidente registrado contra um veículo bloqueia esse veículo;
+- uma ocorrência CRÍTICA registrada contra um motorista bloqueia esse
+  motorista (pedido explícito do cliente: "bloquear motorista caso a
+  ocorrência seja muito severa").
 """
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import NotFoundError, ValidationFailedError
 from app.jobs.recipients import recipients_for_tenant
 from app.models.driver import Driver
-from app.models.enums import AuditAction, NotificationSeverity, VehicleStatus
+from app.models.enums import AuditAction, DriverStatus, NotificationSeverity, OccurrenceSeverity, VehicleStatus
 from app.models.occurrence import Occurrence
 from app.models.user import User
 from app.models.vehicle import Vehicle
@@ -98,6 +101,36 @@ def _auto_block_vehicle_on_accident(
         )
 
 
+def _auto_block_driver_on_critical_severity(
+    db: Session, tenant_id: int, actor: User, occurrence: Occurrence, ip_address: str | None,
+) -> None:
+    """Bloqueia automaticamente o motorista de uma ocorrência CRÍTICA e
+    avisa ADMIN_EMPRESA/SUPERVISOR — mesma transação da criação da
+    ocorrência (mesmo raciocínio do bloqueio de veículo em acidente:
+    ninguém deveria precisar lembrar de fazer isso manualmente depois de
+    algo grave o suficiente pra merecer a severidade mais alta).
+    """
+    if occurrence.driver_id is None or occurrence.severity != OccurrenceSeverity.CRITICA:
+        return
+    driver = db.get(Driver, occurrence.driver_id)
+    if driver is None or driver.tenant_id != tenant_id or driver.status == DriverStatus.BLOQUEADO:
+        return
+
+    driver.status = DriverStatus.BLOQUEADO
+    driver.updated_by = actor.id
+    write_audit_log(
+        db, tenant_id=tenant_id, user_id=actor.id, action=AuditAction.UPDATE, table_name="drivers",
+        record_id=str(driver.id), ip_address=ip_address,
+    )
+    message = f"O motorista {driver.full_name} foi bloqueado automaticamente após uma ocorrência crítica."
+    for recipient in recipients_for_tenant(db, tenant_id):
+        notification_service.create_notification(
+            db, tenant_id=tenant_id, user_id=recipient.id, title="Motorista bloqueado automaticamente",
+            message=message, severity=NotificationSeverity.CRITICAL,
+            related_entity_type="driver", related_entity_id=driver.id,
+        )
+
+
 def create_occurrence(
     db: Session, tenant_id: int, actor: User, payload: OccurrenceCreate, ip_address: str | None,
 ) -> Occurrence:
@@ -115,6 +148,7 @@ def create_occurrence(
         record_id=str(occurrence.id), ip_address=ip_address,
     )
     _auto_block_vehicle_on_accident(db, tenant_id, actor, occurrence, ip_address)
+    _auto_block_driver_on_critical_severity(db, tenant_id, actor, occurrence, ip_address)
     db.commit()
     db.refresh(occurrence)
     return occurrence
