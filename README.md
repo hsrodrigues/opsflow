@@ -20,7 +20,7 @@ manuais.
 > **Status do projeto:** em desenvolvimento por fases, construído sobre uma
 > especificação funcional completa. Este README reflete exatamente o que
 > está implementado e testado agora — nada aqui é aspiracional. Ver
-> [Roadmap](#-roadmap) para o que falta.
+> [Roadmap](#roadmap) para o que falta.
 
 ## Sumário
 
@@ -33,7 +33,7 @@ manuais.
 - [Docker](#-docker)
 - [Testes](#-testes)
 - [Segurança](#-segurança)
-- [Roadmap](#-roadmap)
+- [Roadmap](#roadmap)
 
 ## 📸 Capturas de tela
 
@@ -76,7 +76,7 @@ Implementado, testado e rodando contra MySQL real — não protótipo visual:
 | **Desktop (PySide6)** | Login, shell navegável (sidebar por seção, tema claro/escuro, indicador de conexão), todas as telas acima já com visual final |
 
 Planejado, fase a fase — ver [ARCHITECTURE.md](docs/ARCHITECTURE.md) e a
-seção [Roadmap](#-roadmap).
+seção [Roadmap](#roadmap).
 
 ## 🏗️ Arquitetura
 
