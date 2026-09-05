@@ -26,6 +26,7 @@ manuais.
 
 - [Capturas de tela](#-capturas-de-tela)
 - [Funcionalidades](#-funcionalidades)
+- [Guia do usuário](#guia-do-usuario)
 - [Arquitetura](#-arquitetura)
 - [Stack](#-stack)
 - [Instalação](#-instalação-desenvolvimento)
@@ -77,6 +78,17 @@ Implementado, testado e rodando contra MySQL real — não protótipo visual:
 
 Planejado, fase a fase — ver [ARCHITECTURE.md](docs/ARCHITECTURE.md) e a
 seção [Roadmap](#roadmap).
+
+<a id="guia-do-usuario"></a>
+## 📖 Guia do usuário
+
+Documentação voltada pra quem **usa** o sistema no dia a dia (não
+desenvolvedor): como ativar com uma chave, o que cada papel (Administrador/
+Supervisor/Operador/Visualizador) pode fazer, e um passo a passo de cada
+tela — Dashboard, Cadastros, Programação, Centro de Operações, Ocorrências,
+Relatórios, Usuários, Licença e Configurações.
+
+📄 **[docs/GUIA_DO_USUARIO.md](docs/GUIA_DO_USUARIO.md)**
 
 ## 🏗️ Arquitetura
 
@@ -219,7 +231,7 @@ completos, item a item, com o arquivo/teste que garante cada um:
 | 9 | Testes (cobertura ampla, isolamento multi-tenant) | ✅ Concluída — 139 testes, 93% de cobertura de linha |
 | 10 | Build e instalador | ✅ Concluída — PyInstaller (one-folder) + instalador Inno Setup, testado com instalação/execução/desinstalação silenciosa reais |
 | 11 | Hardening de segurança | ✅ Concluída — rate limiting de verdade, docs desligados fora de dev, cabeçalhos de segurança, CORS sem a combinação inválida wildcard+credentials, `/api/health` sem vazar credencial — ver [SECURITY.md](docs/SECURITY.md) |
-| 12 | Documentação final | 🔶 Em andamento |
+| 12 | Documentação final | ✅ Concluída — [Guia do usuário](docs/GUIA_DO_USUARIO.md) (não-técnico, por papel/tela), [ARCHITECTURE.md](docs/ARCHITECTURE.md), [DATABASE.md](docs/DATABASE.md) e [SECURITY.md](docs/SECURITY.md) atualizados, capturas de tela, [LICENSE](LICENSE) |
 
 Visão de mais longo prazo (mapas/GPS, integrações, IA, mobile):
 [ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -228,6 +240,6 @@ Visão de mais longo prazo (mapas/GPS, integrações, IA, mobile):
 
 <div align="center">
 
-**Licença:** software proprietário — todos os direitos reservados.
+**Licença:** software proprietário — todos os direitos reservados. Ver [LICENSE](LICENSE).
 
 </div>
