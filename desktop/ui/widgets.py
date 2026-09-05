@@ -1,6 +1,6 @@
 """Small reusable widget builders shared across list screens and dialogs."""
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QDialogButtonBox, QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from app.assets import icon_path
@@ -14,15 +14,24 @@ def build_logo_mark(size: int = 48) -> QWidget:
     nos cantos — compõe limpo contra qualquer fundo) quando o arquivo
     existe; cai pra um "O" desenhado em CSS (o visual original) só se o
     arquivo faltar, pra nunca deixar uma tela sem marca nenhuma.
+
+    `QIcon` (não `QPixmap` + `.scaled()`): o `.ico` guarda vários quadros
+    pré-renderizados (16 a 256px); `QIcon.pixmap(size)` escolhe o quadro
+    mais próximo do tamanho pedido, já nítido. Carregar sempre o quadro
+    maior com `QPixmap` e reescalar na hora borra a imagem — bug real
+    visto em tela (a marca de 48px saía visivelmente desfocada).
     """
     path = icon_path()
     if path.is_file():
         label = QLabel()
         label.setFixedSize(size, size)
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        pixmap = QPixmap(str(path)).scaled(
-            size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation,
-        )
+        # `devicePixelRatio` a mais: pede um quadro maior do que o tamanho
+        # exibido e deixa o Qt fazer o downscale de alta qualidade dele pro
+        # tamanho final — mais nítido em telas HiDPI do que pedir o tamanho
+        # exibido exato.
+        pixmap = QIcon(str(path)).pixmap(size * 2, size * 2)
+        pixmap.setDevicePixelRatio(2.0)
         label.setPixmap(pixmap)
         return label
 
