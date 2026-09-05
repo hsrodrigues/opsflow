@@ -58,6 +58,8 @@ def _tenant_to_out(db: Session, tenant: Tenant) -> TenantOut:
         license_status=(license_.status.value if hasattr(license_.status, "value") else license_.status) if license_ else None,
         license_expires_at=license_.expires_at if license_ else None,
         max_users=max_users, max_vehicles=max_vehicles,
+        max_users_override=license_.max_users if license_ else None,
+        max_vehicles_override=license_.max_vehicles if license_ else None,
         user_count=user_count, vehicle_count=vehicle_count,
     )
 

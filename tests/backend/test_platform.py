@@ -37,6 +37,12 @@ def test_super_admin_can_create_and_list_tenants(client, db_session):
     assert body["plan_code"] == "STARTER"
     assert body["license_status"] == "TRIAL"
     assert body["user_count"] == 1
+    # Sem override: max_users/max_vehicles (resolvidos) refletem o plano,
+    # mas o _override (bruto) precisa ser None — é essa distinção que
+    # permite à tela de editar licença saber que "3" aqui é só herdado do
+    # plano, não um valor customizado que trocar de plano preservaria.
+    assert body["max_users_override"] is None
+    assert body["max_vehicles_override"] is None
     assert body["max_users"] == 3  # limite padrão do STARTER
 
     listing = client.get("/api/v1/platform/tenants", headers=headers)
@@ -92,6 +98,8 @@ def test_update_tenant_license_changes_plan_and_status(client, db_session):
     assert body["plan_code"] == "BUSINESS"
     assert body["license_status"] == "ACTIVE"
     assert body["max_vehicles"] == 2000
+    assert body["max_vehicles_override"] == 2000  # override de verdade, não herdado do plano
+    assert body["max_users_override"] is None  # este continua sem override nenhum
 
 
 def test_update_tenant_license_can_explicitly_clear_an_override(client, db_session):

@@ -81,6 +81,13 @@ class TenantLicenseDialog(QDialog):
         for label, _value in _PLAN_OPTIONS:
             self._plan_combo.addItem(label)
         form.addRow("Plano", self._plan_combo)
+        plan_hint = QLabel(
+            "Trocar o plano só muda os limites que estiverem em \"Usar do plano\" "
+            "abaixo — um limite customizado continua valendo no plano novo.",
+            objectName="Faint",
+        )
+        plan_hint.setWordWrap(True)
+        form.addRow("", plan_hint)
 
         self._status_combo = QComboBox()
         for label, _value in _STATUS_OPTIONS:
@@ -106,11 +113,15 @@ class TenantLicenseDialog(QDialog):
         self._max_users_input.setRange(0, 100_000)
         self._max_users_input.setSpecialValueText("Usar do plano")
         form.addRow("Limite de usuários", self._max_users_input)
+        self._users_effective_label = QLabel("", objectName="Muted")
+        form.addRow("", self._users_effective_label)
 
         self._max_vehicles_input = QSpinBox()
         self._max_vehicles_input.setRange(0, 100_000)
         self._max_vehicles_input.setSpecialValueText("Usar do plano")
         form.addRow("Limite de veículos", self._max_vehicles_input)
+        self._vehicles_effective_label = QLabel("", objectName="Muted")
+        form.addRow("", self._vehicles_effective_label)
 
         layout.addLayout(form)
         layout.addSpacing(8)
@@ -133,8 +144,16 @@ class TenantLicenseDialog(QDialog):
             self._expires_input.setDateTime(QDateTime.fromString(tenant["license_expires_at"][:19], "yyyy-MM-ddTHH:mm:ss"))
         else:
             self._expires_input.setDateTime(QDateTime.currentDateTime().addYears(1))
-        self._max_users_input.setValue(tenant.get("max_users") or 0)
-        self._max_vehicles_input.setValue(tenant.get("max_vehicles") or 0)
+        # `_override` (bruto, `None` quando não há), não `max_users`/
+        # `max_vehicles` (já resolvidos pro plano atual) — senão trocar de
+        # plano sem mexer nestes campos "congela" o limite do plano ANTIGO
+        # como override do novo, ao salvar (bug real reportado pelo
+        # usuário). "Usar do plano" (0) só aparece quando não há override
+        # de verdade.
+        self._max_users_input.setValue(tenant.get("max_users_override") or 0)
+        self._max_vehicles_input.setValue(tenant.get("max_vehicles_override") or 0)
+        self._users_effective_label.setText(f"Em vigor hoje: {tenant.get('max_users') or 'sem limite'}")
+        self._vehicles_effective_label.setText(f"Em vigor hoje: {tenant.get('max_vehicles') or 'sem limite'}")
 
     def _handle_renew_clicked(self) -> None:
         now = QDateTime.currentDateTime()

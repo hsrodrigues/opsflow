@@ -39,6 +39,7 @@ class SettingsPage(QWidget):
 
         self._build_ui()
         self._load_current_values()
+        self._load_connection_status()
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -122,6 +123,12 @@ class SettingsPage(QWidget):
         about_layout.addRow(QLabel("Sobre o sistema", objectName="SectionTitle"))
         about_layout.addRow("Versão", QLabel(self._config.app_version, objectName="Muted"))
         about_layout.addRow("Servidor", QLabel(self._config.api_base_url, objectName="Muted"))
+        self._database_value = QLabel("Consultando...", objectName="Muted")
+        about_layout.addRow("Banco de dados", self._database_value)
+        connection_holder = QWidget()
+        self._connection_status_slot = QVBoxLayout(connection_holder)
+        self._connection_status_slot.setContentsMargins(0, 0, 0, 0)
+        about_layout.addRow("Status da conexão", connection_holder)
         layout.addWidget(about_card)
 
         layout.addStretch(1)
@@ -141,6 +148,35 @@ class SettingsPage(QWidget):
         primary_role = self._session.roles[0] if self._session.roles else None
         role_label = _ROLE_LABELS.get(primary_role, primary_role or "—")
         self._role_badge_layout.addWidget(build_badge(role_label, "BadgeNeutral"))
+
+    def _load_connection_status(self) -> None:
+        # `/api/health` não exige token — checagem simples de conectividade,
+        # a mesma rota que já alimenta o indicador 🟢/🔴 do topbar (seção 32),
+        # só que agora também mostrando EM QUAL banco (host) o backend está
+        # falando de verdade. Pedido depois de mais de uma confusão nesta
+        # sessão sobre "qual banco tá ativo agora" (local vs. nuvem).
+        self._health_worker = ApiWorker(self._api_client.check_health)
+        self._health_worker.succeeded.connect(self._handle_connection_status_succeeded)
+        self._health_worker.failed.connect(self._handle_connection_status_failed)
+        self._health_worker.start()
+
+    def _handle_connection_status_succeeded(self, result: dict) -> None:
+        self._database_value.setText(result.get("database_host") or "—")
+        database_up = result.get("database") == "up"
+        text = "Conectado" if database_up else "Sem conexão com o banco"
+        badge_class = "BadgeSuccess" if database_up else "BadgeDanger"
+        self._set_connection_badge(text, badge_class)
+
+    def _handle_connection_status_failed(self, _exc: Exception) -> None:
+        self._database_value.setText("—")
+        self._set_connection_badge("Servidor inacessível", "BadgeDanger")
+
+    def _set_connection_badge(self, text: str, badge_class: str) -> None:
+        while self._connection_status_slot.count():
+            item = self._connection_status_slot.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self._connection_status_slot.addWidget(build_badge(text, badge_class))
 
     def _handle_save_clicked(self) -> None:
         full_name = self._full_name_input.text().strip()

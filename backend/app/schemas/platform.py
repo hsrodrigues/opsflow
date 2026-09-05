@@ -86,5 +86,15 @@ class TenantOut(BaseModel):
     license_expires_at: datetime | None
     max_users: int | None
     max_vehicles: int | None
+    # Valor BRUTO da licença (`licenses.max_users`/`max_vehicles`), `None`
+    # quando não há override — diferente de `max_users`/`max_vehicles`
+    # acima, que já vêm resolvidos (override, senão o limite do PLANO).
+    # Sem isso, a tela de editar licença não tem como saber se "100" é um
+    # override de verdade ou só o limite herdado do plano atual — e ao
+    # trocar de plano sem mexer no campo, acabava congelando o limite do
+    # plano ANTIGO como override do novo (bug real reportado pelo usuário:
+    # "quando muda o plano não deveria mudar a qtd de usuários e veículos?").
+    max_users_override: int | None
+    max_vehicles_override: int | None
     user_count: int
     vehicle_count: int
