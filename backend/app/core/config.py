@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     # --- General ---
     app_name: str = "OpsFlow API"
     app_env: Literal["development", "staging", "production"] = "development"
-    app_version: str = "1.0.0"
+    app_version: str = "1.1.0"
     debug: bool = False
 
     # --- Database ---

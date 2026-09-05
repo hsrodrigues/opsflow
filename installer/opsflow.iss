@@ -15,7 +15,7 @@
 ; first (`pyinstaller installer\OpsFlow.spec` from the repo root).
 
 #define MyAppName "OpsFlow"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "OpsFlow"
 #define MyAppExeName "OpsFlow.exe"
 

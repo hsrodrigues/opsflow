@@ -20,5 +20,5 @@ def load_config() -> DesktopConfig:
     return DesktopConfig(
         api_base_url=os.environ.get("OPSFLOW_API_URL", "http://127.0.0.1:8000").rstrip("/"),
         request_timeout_seconds=float(os.environ.get("OPSFLOW_API_TIMEOUT", "10")),
-        app_version="1.0.0",
+        app_version="1.1.0",
     )
